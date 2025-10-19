@@ -1,0 +1,7 @@
+ProjectID,ProjectName,InvestorID,InvestorName,MatchScore,MatchReasons
+P005,NorthernMethaneFix,I008,Atlas Carbon Partners,0.7,Region alignment: Asia; Sector alignment: Methane Reduction
+P008,DeltaBiochar,I009,GreenBridge Capital,0.4,Sector alignment: Biochar
+P010,SteppeGasFix,I008,Atlas Carbon Partners,0.7,Region alignment: Asia; Sector alignment: Methane Reduction
+P013,SierraWaters,I004,Zenith Impact,0.7,Region alignment: Latin America; Sector alignment: Blue Carbon
+P013,SierraWaters,I011,Pacific Impact Fund,0.4,Sector alignment: Blue Carbon
+P014,HighlandAgro,I003,Summit Green Partners,0.7,Region alignment: Asia; Sector alignment: Agroforestry
