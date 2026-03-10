@@ -1,1 +1,1 @@
-In this Repository you will get all the project do by me.
+Many Projects are uploads as a signle Zip file.
