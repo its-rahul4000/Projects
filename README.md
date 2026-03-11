@@ -142,7 +142,7 @@ The project documents an **8-week structured study plan** covering the mathemati
 
 ---
 
-## 📊 HS312_Project
+## 📊 HS312_Project(Humanity Science)
 
 ### Sleep and Dream Quality Data Analysis
 
