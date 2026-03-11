@@ -1,18 +1,18 @@
-Press Ctrl+shift+P to view in render version.
-
 # 📂 Rahul Kumar – Engineering & Research Projects
 
 This repository contains a collection of **academic, research, and personal projects** developed during my undergraduate studies in **Electrical Engineering at IIT Bombay**.
 
-The projects span across:
+The projects span across multiple domains including:
 
 - Computer Architecture  
 - Embedded Systems  
 - Artificial Intelligence  
 - Analog Computing  
 - Full-Stack Development  
+- Data Analytics & Business Analysis  
+- Humanities & Social Science  
 
-Each folder or archive contains the **implementation code, simulations, and reports** associated with the respective project.
+Each folder or archive contains the **implementation code, simulations, reports, or research documentation** associated with the respective project.
 
 ---
 
@@ -20,23 +20,23 @@ Each folder or archive contains the **implementation code, simulations, and repo
 
 ## 🧠 Integrated_AI
 
-### AI-powered knowledge query system
+### AI-powered Knowledge Query System
 
 - Developed an AI assistant capable of answering and summarizing natural language queries across multiple data sources.
 - Built a hybrid pipeline combining **semantic search (Sentence Transformers)** and **rule-based intent parsing**.
 - Implemented the backend in **Python** with an interactive **Streamlit interface** for insight visualization.
-- Supports **entity resolution, contextual comparison, and information extraction**.
+- Supports **entity resolution, contextual comparison, and information extraction** across datasets.
 
 ---
 
 ## 🌐 Full Stack Website Development
 
-### Full-stack e-commerce platform
+### Full-Stack E-Commerce Platform
 
 - Designed and developed a **complete e-commerce web application** with separate **user and admin portals**.
 - Implemented backend services using **Node.js, Express.js, and MongoDB**.
 - Built a responsive frontend using **HTML, CSS, and JavaScript**.
-- Includes **product catalog management, order handling, and admin dashboard**.
+- Includes **product catalog management, order processing, and administrative dashboards**.
 
 ---
 
@@ -44,10 +44,10 @@ Each folder or archive contains the **implementation code, simulations, and repo
 
 ### Vertical Motion Analog Computing System
 
-- Designed an **analog computer using operational amplifiers** to solve second-order differential equations.
+- Designed an **analog computer using operational amplifiers** to solve second-order differential equations representing vertical motion.
 - Implemented **summers, buffers, and integrator circuits** to simulate gravitational, damping, and spring forces.
-- Used **LTSpice simulation** and validated results experimentally with oscilloscope measurements.
-- Demonstrates **physical modeling of dynamic systems using analog circuits**.
+- Simulated the system using **LTSpice** and validated results experimentally using oscilloscope measurements.
+- Demonstrates the use of **analog circuits for physical system modeling**.
 
 ---
 
@@ -55,21 +55,21 @@ Each folder or archive contains the **implementation code, simulations, and repo
 
 ### 5-Stage Pipelined CPU Architecture (VHDL)
 
-Designed an **8-bit pipelined processor** with the following stages:
+Designed and implemented an **8-bit pipelined processor** consisting of the following stages:
 
 - Instruction Fetch (IF)  
 - Instruction Decode (ID)  
 - Execute (EX)  
-- Memory (MEM)  
+- Memory Access (MEM)  
 - Write Back (WB)
 
-Key features:
+Key features include:
 
-- Data forwarding
-- Pipeline interlocks
-- Hazard detection
-- Stall logic implementation
-- Custom RISC ISA with memory-mapped I/O
+- Data forwarding mechanisms  
+- Pipeline interlocks  
+- Hazard detection and stall logic  
+- Custom RISC instruction set architecture (ISA)  
+- Memory-mapped I/O support  
 - Cycle-accurate verification using **ModelSim simulations**
 
 ---
@@ -79,9 +79,9 @@ Key features:
 ### 16-bit Multicycle Processor
 
 - Implemented a **16-bit CPU using a multicycle datapath architecture**.
-- Designed a **centralized FSM controller** to manage instruction execution cycles.
-- Supported **R-type, I-type, and J-type instructions** including arithmetic and branching.
-- Debugged datapath and control signals using **waveform analysis and simulation**.
+- Designed a **centralized finite state machine (FSM) controller** to manage instruction execution cycles.
+- Supported **R-type, I-type, and J-type instructions**, including arithmetic operations, branching, and memory access.
+- Debugged datapath and control logic using **waveform analysis and simulation tools**.
 
 ---
 
@@ -90,32 +90,32 @@ Key features:
 ### 8051 Microcontroller Communication System
 
 - Implemented **serial communication between two AT89C5131 microcontrollers**.
-- Designed a **master–slave resource sharing system using UART communication**.
-- Implemented **full-duplex transmit and receive routines with synchronization flags**.
-- Displayed results on **16×2 LCD interfaces** on both boards.
+- Designed a **master–slave resource sharing system** using UART communication.
+- Developed **full-duplex transmit and receive routines** synchronized through flag-based communication.
+- Displayed results on **16×2 LCD interfaces** connected to both boards.
 
 ---
 
 ## 🧪 VHDL_Project.zip
 
-### Digital Logic Design using VHDL
+### Digital Logic Design Using VHDL
 
-Implemented digital circuits using:
+Implemented multiple digital circuits using:
 
-- Structural modeling
-- Behavioral modeling
-- Dataflow modeling
+- Structural modeling  
+- Behavioral modeling  
+- Dataflow modeling  
 
-Designed and simulated:
+Designed and simulated several digital components including:
 
-- ALUs  
+- Arithmetic Logic Units (ALU)  
 - Multiplexers  
 - Encoders  
 - Adders  
 - Multipliers  
 - Finite State Machines (FSM)
 
-Synthesized designs on **FPGA boards** and verified functionality.
+Synthesized and tested designs on **FPGA boards**, ensuring correct timing and functional behavior.
 
 ---
 
@@ -123,21 +123,22 @@ Synthesized designs on **FPGA boards** and verified functionality.
 
 ### Artificial Intelligence & Machine Learning Theory Study
 
-This folder contains my **Summer of Science research project** exploring the **theoretical foundations of Machine Learning and Artificial Intelligence**.
+This folder contains my **Summer of Science research project**, where I explored the theoretical foundations of **Machine Learning and Artificial Intelligence**.
 
-**Report:**  
+**Report Included**
+
 `final_report_AI_ML`
 
 Topics studied include:
 
 - Foundations of **AI, ML, and Deep Learning**
 - **Linear and Logistic Regression**
-- **Optimization methods** (Gradient Descent, Adam)
-- **Decision Trees, Random Forests, and SVM**
-- **Clustering and PCA**
-- **Neural Networks and CNN architectures**
+- **Optimization algorithms** (Gradient Descent, Adam)
+- **Decision Trees, Random Forests, and Support Vector Machines**
+- **Clustering techniques and Principal Component Analysis (PCA)**
+- **Neural Networks and Convolutional Neural Networks**
 
-The report documents an **8-week structured study plan and theoretical exploration of modern ML techniques**.
+The project documents an **8-week structured study plan** covering the mathematical and algorithmic principles underlying modern machine learning systems.
 
 ---
 
@@ -147,23 +148,54 @@ The report documents an **8-week structured study plan and theoretical explorati
 
 This project investigates the relationship between:
 
-- Sleep duration
-- Dream recall
-- Perceived sleep quality
+- Sleep duration  
+- Dream recall  
+- Perceived sleep quality  
 
 using **personal data collected over multiple days**.
 
-**Report:**  
+**Report Included**
+
 `Final Documentation`
 
-Key elements include:
+Key components include:
 
 - Daily sleep tracking dataset
 - Exploratory data visualization
-- Correlation analysis between sleep duration and subjective sleep rating
-- Visual storytelling of sleep patterns using data visualization
+- Correlation analysis between sleep duration and sleep rating
+- Visual storytelling of sleep patterns using data-driven graphics
 
-The report explores how **quantitative metrics and subjective experiences interact in personal data analysis**.
+The project explores how **quantitative data and subjective experiences interact in personal behavioral analysis**.
+
+---
+
+# 📈 Data Analytics / Business Analysis Projects
+
+## 📦 Logistics AI Platform Competitive Analysis
+
+This project presents a **data-driven competitive analysis of AI-powered logistics platforms**, focusing on **Mojro and its key competitors: Locus, FarEye, and LogiNext Solutions**.
+
+The analysis examines **product capabilities, technology stacks, market positioning, and strategic differentiators** within the logistics SaaS ecosystem.
+
+### Files Included
+
+- Competitive analysis presentation  
+- Structured research documentation  
+- Feature and technology comparison data  
+
+### Key Areas of Analysis
+
+- Product feature comparison  
+- AI-driven route optimization capabilities  
+- Technology stack evaluation (languages, cloud infrastructure, APIs)  
+- Market positioning and industry use cases  
+- SWOT analysis of Mojro in comparison with competitors  
+
+### Key Insights
+
+- Mojro’s strength lies in **deep logistics optimization algorithms and multi-leg route planning**.
+- Competitors differentiate through **global logistics scale (Locus), branded delivery experience (FarEye), and execution automation (LogiNext)**.
+- The study highlights how **AI-driven logistics platforms compete through algorithmic optimization, enterprise integrations, and real-time operational intelligence**.
 
 ---
 
@@ -171,31 +203,31 @@ The report explores how **quantitative metrics and subjective experiences intera
 
 ## Programming
 
-- C++
-- Python
-- Embedded C
-- 8051 Assembly
-- JavaScript
-- VHDL
+- C++  
+- Python  
+- Embedded C  
+- 8051 Assembly  
+- JavaScript  
+- VHDL  
 
 ## Tools & Platforms
 
-- Quartus
-- ModelSim
-- Keil µVision
-- LTSpice
-- GNU Radio
-- Arduino IDE
-- Git
-- Streamlit
+- Quartus  
+- ModelSim  
+- Keil µVision  
+- LTSpice  
+- GNU Radio  
+- Arduino IDE  
+- Git  
+- Streamlit  
 
 ## Hardware
 
-- 8051 Microcontroller
-- FPGA (XEN10)
-- Arduino
-- Oscilloscope
-- Signal Generators
+- 8051 Microcontroller  
+- FPGA (XEN10)  
+- Arduino  
+- Oscilloscope  
+- Signal Generators  
 
 ---
 
@@ -213,9 +245,12 @@ Indian Institute of Technology Bombay
 📧 Personal Email  
 rahul9304825637@gmail.com  
 
+---
+
 ### Interests
 
-- Computer Architecture
-- Embedded Systems
-- Artificial Intelligence
-- Digital System Design
+- Computer Architecture  
+- Embedded Systems  
+- Artificial Intelligence  
+- Digital System Design  
+- Data Analytics & Technology Strategy
