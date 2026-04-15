@@ -2,234 +2,207 @@
 
 This repository contains a collection of **academic, research, and personal projects** developed during my undergraduate studies in **Electrical Engineering at IIT Bombay**.
 
-The projects span across multiple domains including:
+The projects span across multiple domains:
 
-- Computer Architecture  
 - Embedded Systems  
-- Artificial Intelligence  
-- Analog Computing  
+- Artificial Intelligence & Machine Learning  
 - Full-Stack Development  
-- Data Analytics & Business Analysis  
-- Humanities & Social Science  
+- Computer Architecture  
+- Analog Computing  
+- Energy Systems & Forecasting  
+- Data Analytics  
 
-Each folder or archive contains the **implementation code, simulations, reports, or research documentation** associated with the respective project.
-
----
+Each project includes **code, reports, simulations, and documentation**.
 
 # 📁 Project Overview
 
-## 🧠 Integrated_AI
+## 🏗️ Concrete Maturity Meter
 
-### AI-powered Knowledge Query System
+### Embedded IoT System for Concrete Strength Monitoring
 
-- Developed an AI assistant capable of answering and summarizing natural language queries across multiple data sources.
-- Built a hybrid pipeline combining **semantic search (Sentence Transformers)** and **rule-based intent parsing**.
-- Implemented the backend in **Python** with an interactive **Streamlit interface** for insight visualization.
-- Supports **entity resolution, contextual comparison, and information extraction** across datasets.
+- Developed a **low-power embedded device** for real-time monitoring of concrete curing using temperature-based maturity models.  
+- Implemented **on-device computation of maturity index and strength %** using MCU.  
+- Integrated **TMP1075 sensor, SPI Flash, and BLE (CC2650)** for sensing, storage, and communication.  
+- Designed a **battery-powered ultra-low power system** using sleep modes and duty-cycled BLE.  
+- Enables **non-destructive, in-situ strength estimation**, eliminating traditional delays.  
 
----
+### Key Highlights
+
+- Sampling every **10–15 minutes with long battery life (>2 months)**  
+- Reliable BLE communication **through concrete (≈ 8–9 cm range)** 
+- Compact embedded system (~40×30×20 mm)  
+- Full pipeline: sensing → storage → computation → wireless broadcast  
+
+## 🌊 Forecasting of Offshore Wind Power
+
+### Time-Series Forecasting & Renewable Energy Analysis
+
+- Developed a **data-driven forecasting model** for offshore wind power generation.  
+- Applied **time-series analysis and machine learning techniques** to predict power output.  
+- Preprocessed real-world datasets including **wind speed, temporal patterns, and environmental factors**.  
+- Built models to capture **seasonal trends, variability, and uncertainty in renewable energy systems**.  
+
+### Key Contributions
+
+- Data cleaning and feature engineering for time-series modeling  
+- Implementation of forecasting models (statistical / ML-based)  
+- Performance evaluation using error metrics (MAE, RMSE)  
+- Visualization of predicted vs actual wind power trends  
+
+### Impact
+
+- Helps in **grid stability and energy planning**  
+- Supports **renewable energy integration**
+
+## 🧠 Integrated AI Query System
+
+### AI-powered Knowledge Assistant
+
+- Built an AI system capable of **answering, comparing, and summarizing queries**.  
+- Used **Sentence Transformers (semantic search)** + rule-based parsing.  
+- Implemented complete pipeline for:
+  - Data cleaning  
+  - Entity resolution  
+  - Insight extraction  
+- Developed interactive UI using **Streamlit**.
 
 ## 🌐 Full Stack Website Development
 
-### Full-Stack E-Commerce Platform
+### Full-Stack Hardware Store Website
 
-- Designed and developed a **complete e-commerce web application** with separate **user and admin portals**.
-- Implemented backend services using **Node.js, Express.js, and MongoDB**.
-- Built a responsive frontend using **HTML, CSS, and JavaScript**.
-- Includes **product catalog management, order processing, and administrative dashboards**.
+- Built a **complete e-commerce platform** with separate **user & admin portals**.  
+- Backend: **Node.js, Express.js, MongoDB**  
+- Frontend: **HTML, CSS, JavaScript (responsive design)**  
 
----
+### Features
 
-## ⚡ Analog_Computer
+- Product browsing + **Featured & Hot Products**
+- Cart & order system  
+- Admin dashboard (products, orders, messages)  
+- Customer–admin communication  
 
-### Vertical Motion Analog Computing System
+## 💻 Pipelined CPU
 
-- Designed an **analog computer using operational amplifiers** to solve second-order differential equations representing vertical motion.
-- Implemented **summers, buffers, and integrator circuits** to simulate gravitational, damping, and spring forces.
-- Simulated the system using **LTSpice** and validated results experimentally using oscilloscope measurements.
-- Demonstrates the use of **analog circuits for physical system modeling**.
+### 5-Stage Pipelined Processor (VHDL)
 
----
+- Designed an **8-bit pipelined CPU** with:
+  - IF, ID, EX, MEM, WB stages  
+- Implemented:
+  - Hazard detection  
+  - Data forwarding  
+  - Pipeline stalls  
 
-## 💻 Pipelined_CPU.zip
-
-### 5-Stage Pipelined CPU Architecture (VHDL)
-
-Designed and implemented an **8-bit pipelined processor** consisting of the following stages:
-
-- Instruction Fetch (IF)  
-- Instruction Decode (ID)  
-- Execute (EX)  
-- Memory Access (MEM)  
-- Write Back (WB)
-
-Key features include:
-
-- Data forwarding mechanisms  
-- Pipeline interlocks  
-- Hazard detection and stall logic  
-- Custom RISC instruction set architecture (ISA)  
-- Memory-mapped I/O support  
-- Cycle-accurate verification using **ModelSim simulations**
-
----
-
-## 🧮 Multicycle_CPU.zip
+## 🧮 Multicycle CPU
 
 ### 16-bit Multicycle Processor
 
-- Implemented a **16-bit CPU using a multicycle datapath architecture**.
-- Designed a **centralized finite state machine (FSM) controller** to manage instruction execution cycles.
-- Supported **R-type, I-type, and J-type instructions**, including arithmetic operations, branching, and memory access.
-- Debugged datapath and control logic using **waveform analysis and simulation tools**.
+- Designed CPU using **FSM-controlled datapath architecture**  
+- Supported:
+  - Arithmetic operations  
+  - Branching  
+  - Memory access  
 
----
+## 🔌 Microcontrollers UART Communication
 
-## 🔌 Microcontrollers_Uart_Communication.zip
+### 8051 Communication System
 
-### 8051 Microcontroller Communication System
+- Implemented **master-slave communication** using AT89C5131  
+- Designed **full-duplex UART logic** with synchronization  
+- Displayed outputs on **LCD modules**  
 
-- Implemented **serial communication between two AT89C5131 microcontrollers**.
-- Designed a **master–slave resource sharing system** using UART communication.
-- Developed **full-duplex transmit and receive routines** synchronized through flag-based communication.
-- Displayed results on **16×2 LCD interfaces** connected to both boards.
+## 📡 Wireless Communication (GNU Radio)
 
----
+- Designed a **complete digital communication system** using GNU Radio  
+- Implemented:
+  - ASK, FSK, PSK, QAM  
+- Tested with **RTL-SDR hardware**  
+- Analyzed performance under noise and synchronization errors
 
-## 🧪 VHDL_Project.zip
+ ## 🧪 VHDL Project
 
-### Digital Logic Design Using VHDL
+### Digital Logic Design
 
-Implemented multiple digital circuits using:
+- Designed multiple components:
+  - ALU  
+  - FSM  
+  - Multiplexers  
+  - Adders  
 
-- Structural modeling  
-- Behavioral modeling  
-- Dataflow modeling  
+- Implemented on FPGA with timing validation   
+## ⚡ Analog Computer
 
-Designed and simulated several digital components including:
+### Vertical Motion Analog Computing System
 
-- Arithmetic Logic Units (ALU)  
-- Multiplexers  
-- Encoders  
-- Adders  
-- Multipliers  
-- Finite State Machines (FSM)
-
-Synthesized and tested designs on **FPGA boards**, ensuring correct timing and functional behavior.
-
----
+- Designed an **analog computer using op-amps** to solve differential equations.  
+- Implemented **integrators, summers, buffers** for physical system modeling.  
+- Simulated using **LTSpice** and validated experimentally. 
+  
 
 ## 🔬 SOS (Summer of Science)
 
-### Artificial Intelligence & Machine Learning Theory Study
+### AI & ML Theory Study
 
-This folder contains my **Summer of Science research project**, where I explored the theoretical foundations of **Machine Learning and Artificial Intelligence**.
+- Studied:
+  - Regression models  
+  - Optimization algorithms  
+  - Neural networks  
+  - PCA & clustering  
 
-**Report Included**
+- Built strong theoretical foundation in ML  
 
-`final_report_AI_ML`
+## 📊 HS312 Project
 
-Topics studied include:
+### Sleep & Dream Quality Analysis
 
-- Foundations of **AI, ML, and Deep Learning**
-- **Linear and Logistic Regression**
-- **Optimization algorithms** (Gradient Descent, Adam)
-- **Decision Trees, Random Forests, and Support Vector Machines**
-- **Clustering techniques and Principal Component Analysis (PCA)**
-- **Neural Networks and Convolutional Neural Networks**
+- Collected and analyzed personal sleep data  
+- Performed:
+  - Visualization  
+  - Correlation analysis  
+  - Behavioral insights  
 
-The project documents an **8-week structured study plan** covering the mathematical and algorithmic principles underlying modern machine learning systems.
+## 📦 Data Analytics Project
 
----
+### Logistics AI Platform Analysis
 
-## 📊 HS312_Project(Humanity Science)
+- Compared platforms: **Mojro, Locus, FarEye, LogiNext**  
+- Evaluated:
+  - AI capabilities  
+  - Tech stack  
+  - Market positioning  
 
-### Sleep and Dream Quality Data Analysis
 
-This project investigates the relationship between:
-
-- Sleep duration  
-- Dream recall  
-- Perceived sleep quality  
-
-using **personal data collected over multiple days**.
-
-**Report Included**
-
-`Final Documentation`
-
-Key components include:
-
-- Daily sleep tracking dataset
-- Exploratory data visualization
-- Correlation analysis between sleep duration and sleep rating
-- Visual storytelling of sleep patterns using data-driven graphics
-
-The project explores how **quantitative data and subjective experiences interact in personal behavioral analysis**.
-
----
-
-# 📈 Data Analytics / Business Analysis Projects
-
-## 📦 Logistics AI Platform Competitive Analysis
-
-This project presents a **data-driven competitive analysis of AI-powered logistics platforms**, focusing on **Mojro and its key competitors: Locus, FarEye, and LogiNext Solutions**.
-
-The analysis examines **product capabilities, technology stacks, market positioning, and strategic differentiators** within the logistics SaaS ecosystem.
-
-### Files Included
-
-- Competitive analysis presentation  
-- Structured research documentation  
-- Feature and technology comparison data  
-
-### Key Areas of Analysis
-
-- Product feature comparison  
-- AI-driven route optimization capabilities  
-- Technology stack evaluation (languages, cloud infrastructure, APIs)  
-- Market positioning and industry use cases  
-- SWOT analysis of Mojro in comparison with competitors  
-
-### Key Insights
-
-- Mojro’s strength lies in **deep logistics optimization algorithms and multi-leg route planning**.
-- Competitors differentiate through **global logistics scale (Locus), branded delivery experience (FarEye), and execution automation (LogiNext)**.
-- The study highlights how **AI-driven logistics platforms compete through algorithmic optimization, enterprise integrations, and real-time operational intelligence**.
-
----
-
-# 🛠 Technologies Used
+# 🛠 Technical Skills
 
 ## Programming
-
 - C++  
 - Python  
 - Embedded C  
-- 8051 Assembly  
 - JavaScript  
 - VHDL  
 
-## Tools & Platforms
-
-- Quartus  
-- ModelSim  
+## Tools & Technologies
+- Node.js, Express.js  
+- MongoDB  
+- Streamlit  
 - Keil µVision  
+- ModelSim  
 - LTSpice  
 - GNU Radio  
-- Arduino IDE  
-- Git  
-- Streamlit  
 
 ## Hardware
-
 - 8051 Microcontroller  
-- FPGA (XEN10)  
-- Arduino  
+- CC2650 / STM32  
+- FPGA (Xilinx)  
+- Sensors (TMP1075)  
 - Oscilloscope  
-- Signal Generators  
 
----
+# 🎯 Interests
+
+- Embedded Systems & IoT  
+- Artificial Intelligence & Machine Learning  
+- Computer Architecture  
+- Renewable Energy Systems  
+- Full-Stack Development  
 
 # 📌 About Me
 
@@ -237,20 +210,5 @@ The analysis examines **product capabilities, technology stacks, market position
 B.Tech Electrical Engineering  
 Indian Institute of Technology Bombay  
 
-📞 +91 7050243955  
-
-📧 Working Email  
-23b1212@iitb.ac.in  
-
-📧 Personal Email  
-rahul9304825637@gmail.com  
-
----
-
-### Interests
-
-- Computer Architecture  
-- Embedded Systems  
-- Artificial Intelligence  
-- Digital System Design  
-- Data Analytics & Technology Strategy
+# 📬 Contact 
+- LinkedIn:https://www.linkedin.com/in/rahul-kumar-90186830a
