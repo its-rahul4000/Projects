@@ -1,0 +1,806 @@
+/******************************************************************************
+
+ @file  simple_peripheral.c
+
+ @brief This file contains the Simple BLE Peripheral sample application for use
+        with the CC2650 Bluetooth Low Energy Protocol Stack.
+
+*****************************************************************************/
+
+/*********************************************************************
+ * INCLUDES
+ */
+#include <string.h>
+#include <stdbool.h>
+
+#include <ti/sysbios/knl/Task.h>
+#include <ti/sysbios/knl/Clock.h>
+#include <ti/sysbios/knl/Semaphore.h>
+#include <ti/sysbios/knl/Queue.h>
+
+#include <ti/drivers/I2C.h>
+#include <ti/mw/display/Display.h> // <-- ADDED BACK: To satisfy the linker
+
+#include "hci_tl.h"
+#include "gatt.h"
+#include "linkdb.h"
+#include "gapgattserver.h"
+#include "gattservapp.h"
+#include "devinfoservice.h"
+#include "simple_gatt_profile.h"
+
+#if defined(FEATURE_OAD) || defined(IMAGE_INVALIDATE)
+#include "oad_target.h"
+#include "oad.h"
+#endif //FEATURE_OAD || IMAGE_INVALIDATE
+
+#include "peripheral.h"
+#include "gapbondmgr.h"
+#include "gap.h"
+
+#include "osal_snv.h"
+#include "icall_apimsg.h"
+#include "util.h"
+
+#ifdef USE_RCOSC
+#include "rcosc_calibration.h"
+#endif //USE_RCOSC
+
+#include "board_key.h"
+#include "board.h"
+#include "simple_peripheral.h"
+
+// --- NEW INCLUDE ADDED TO READ RESET REASON ---
+#include <driverlib/sys_ctrl.h>
+
+#if defined( USE_FPGA ) || defined( DEBUG_SW_TRACE )
+#include <driverlib/ioc.h>
+#endif // USE_FPGA | DEBUG_SW_TRACE
+
+/*********************************************************************
+ * CONSTANTS
+ */
+
+// 800 * 0.625ms = 500ms Continuous Advertising Interval (When awake)
+#define DEFAULT_ADVERTISING_INTERVAL          800
+#define DEFAULT_DISCOVERABLE_MODE             GAP_ADTYPE_FLAGS_GENERAL
+
+#ifndef FEATURE_OAD
+#define DEFAULT_DESIRED_MIN_CONN_INTERVAL     80
+#define DEFAULT_DESIRED_MAX_CONN_INTERVAL     800
+#else //!FEATURE_OAD
+#define DEFAULT_DESIRED_MIN_CONN_INTERVAL     8
+#define DEFAULT_DESIRED_MAX_CONN_INTERVAL     8
+#endif // FEATURE_OAD
+
+#define DEFAULT_DESIRED_SLAVE_LATENCY         0
+#define DEFAULT_DESIRED_CONN_TIMEOUT          1000
+#define DEFAULT_ENABLE_UPDATE_REQUEST         GAPROLE_LINK_PARAM_UPDATE_INITIATE_BOTH_PARAMS
+#define DEFAULT_CONN_PAUSE_PERIPHERAL         6
+
+// --- NEW SENSOR TIMING ---
+// 600000ms (10 minutes) for 6 readings per hour
+#define SBP_PERIODIC_EVT_PERIOD               600000 
+
+#ifdef FEATURE_OAD
+#define OAD_PACKET_SIZE                       ((OAD_BLOCK_SIZE) + 2)
+#endif // FEATURE_OAD
+
+#define SBP_TASK_PRIORITY                     1
+
+#ifndef SBP_TASK_STACK_SIZE
+#define SBP_TASK_STACK_SIZE                   644
+#endif
+
+// --- EVENT FLAGS ---
+#define SBP_STATE_CHANGE_EVT                  0x0001
+#define SBP_CHAR_CHANGE_EVT                   0x0002
+#define SBP_PERIODIC_EVT                      0x0004
+#define SBP_CONN_EVT_END_EVT                  0x0008
+#define SBP_ADV_OFF_EVT                       0x0010  // Trigger sleep mode
+#define SBP_ADV_ON_EVT                        0x0020  // Trigger wake mode
+
+// --- BLE DUTY CYCLE TIMINGS ---
+#define ADV_ON_DURATION                       10000   // 10 Seconds awake
+#define ADV_OFF_DURATION                      180000  // 3 Minutes asleep
+
+/*********************************************************************
+ * TYPEDEFS
+ */
+typedef struct
+{
+  appEvtHdr_t hdr;  // event header.
+} sbpEvt_t;
+
+/*********************************************************************
+ * GLOBAL VARIABLES
+ */
+Display_Handle dispHandle = NULL; // <-- ADDED BACK: Dummy variable for the linker
+static I2C_Handle i2c;
+
+// --- MATURITY TRACKING VARIABLES ---
+#define DATUM_TEMPERATURE -10.0f
+static float tempAccumulator = 0.0f;
+static uint8_t sampleCount = 0;
+static uint32_t hoursUptime = 0;
+static float cumulativeMaturity = 0.0f;
+
+/*********************************************************************
+ * LOCAL VARIABLES
+ */
+static ICall_EntityID selfEntity;
+static ICall_Semaphore sem;
+static Clock_Struct periodicClock;
+static Clock_Struct advOffClock;
+static Clock_Struct advOnClock;
+static bool isBLEAdvertising = true; 
+
+static Queue_Struct appMsg;
+static Queue_Handle appMsgQueue;
+
+#if defined(FEATURE_OAD)
+static Queue_Struct oadQ;
+static Queue_Handle hOadQ;
+#endif //FEATURE_OAD
+
+static uint16_t events;
+Task_Struct sbpTask;
+Char sbpTaskStack[SBP_TASK_STACK_SIZE];
+
+// Bluetooth Device Name: "Maturity index"
+static uint8_t scanRspData[] =
+{
+  0x0F, // Length (15 bytes)
+  GAP_ADTYPE_LOCAL_NAME_COMPLETE,
+  'M','a','t','u','r','i','t','y',' ','I','n','d','e','x'
+};
+
+// Live Advertising Packet: Flags + Manufacturer Specific Data
+static uint8_t advertData[] =
+{
+  0x02,
+  GAP_ADTYPE_FLAGS,
+  GAP_ADTYPE_FLAGS_GENERAL | GAP_ADTYPE_FLAGS_BREDR_NOT_SUPPORTED,
+  
+  0x0C, // Length of payload (12 bytes)
+  GAP_ADTYPE_MANUFACTURER_SPECIFIC,
+  0x0D, 0x00, // Texas Instruments Company ID
+  '0','0','0','0','.','0','0','0','0' // Indices 7 through 15 (ASCII Maturity Value)
+};
+
+static uint8_t attDeviceName[GAP_DEVICE_NAME_LEN] = "Maturity Index";
+static gattMsgEvent_t *pAttRsp = NULL;
+static uint8_t rspTxRetry = 0;
+
+/*********************************************************************
+ * LOCAL FUNCTIONS
+ */
+static void SimpleBLEPeripheral_init( void );
+static void SimpleBLEPeripheral_taskFxn(UArg a0, UArg a1);
+static uint8_t SimpleBLEPeripheral_processStackMsg(ICall_Hdr *pMsg);
+static uint8_t SimpleBLEPeripheral_processGATTMsg(gattMsgEvent_t *pMsg);
+static void SimpleBLEPeripheral_processAppMsg(sbpEvt_t *pMsg);
+static void SimpleBLEPeripheral_processStateChangeEvt(gaprole_States_t newState);
+static void SimpleBLEPeripheral_processCharValueChangeEvt(uint8_t paramID);
+static void SimpleBLEPeripheral_performPeriodicTask(void);
+static void SimpleBLEPeripheral_clockHandler(UArg arg);
+static void SimpleBLEPeripheral_sendAttRsp(void);
+static void SimpleBLEPeripheral_freeAttRsp(uint8_t status);
+static void SimpleBLEPeripheral_stateChangeCB(gaprole_States_t newState);
+
+#ifndef FEATURE_OAD_ONCHIP
+static void SimpleBLEPeripheral_charValueChangeCB(uint8_t paramID);
+#endif //!FEATURE_OAD_ONCHIP
+
+static void SimpleBLEPeripheral_enqueueMsg(uint8_t event, uint8_t state);
+
+#ifdef FEATURE_OAD
+void SimpleBLEPeripheral_processOadWriteCB(uint8_t event, uint16_t connHandle, uint8_t *pData);
+#endif //FEATURE_OAD
+
+extern void AssertHandler(uint8 assertCause, uint8 assertSubcause);
+
+/*********************************************************************
+ * PROFILE CALLBACKS
+ */
+static gapRolesCBs_t SimpleBLEPeripheral_gapRoleCBs = { SimpleBLEPeripheral_stateChangeCB };
+static gapBondCBs_t simpleBLEPeripheral_BondMgrCBs = { NULL, NULL };
+
+#ifndef FEATURE_OAD_ONCHIP
+static simpleProfileCBs_t SimpleBLEPeripheral_simpleProfileCBs = { SimpleBLEPeripheral_charValueChangeCB };
+#endif //!FEATURE_OAD_ONCHIP
+
+#ifdef FEATURE_OAD
+static oadTargetCBs_t simpleBLEPeripheral_oadCBs = { SimpleBLEPeripheral_processOadWriteCB };
+#endif //FEATURE_OAD
+
+/*********************************************************************
+ * PUBLIC FUNCTIONS
+ */
+void SimpleBLEPeripheral_createTask(void)
+{
+  Task_Params taskParams;
+  Task_Params_init(&taskParams);
+  taskParams.stack = sbpTaskStack;
+  taskParams.stackSize = SBP_TASK_STACK_SIZE;
+  taskParams.priority = SBP_TASK_PRIORITY;
+  Task_construct(&sbpTask, SimpleBLEPeripheral_taskFxn, &taskParams, NULL);
+}
+
+static void SimpleBLEPeripheral_init(void)
+{
+  ICall_registerApp(&selfEntity, &sem);
+
+#ifdef USE_RCOSC
+  RCOSC_enableCalibration();
+#endif // USE_RCOSC
+
+  appMsgQueue = Util_constructQueue(&appMsg);
+  
+  // Sensor Tracking Clock (10 Minutes)
+  Util_constructClock(&periodicClock, SimpleBLEPeripheral_clockHandler,
+                      SBP_PERIODIC_EVT_PERIOD, SBP_PERIODIC_EVT_PERIOD, true, SBP_PERIODIC_EVT);
+
+  // BLE Sleep Control Clocks
+  Util_constructClock(&advOffClock, SimpleBLEPeripheral_clockHandler,
+                      ADV_ON_DURATION, 0, false, SBP_ADV_OFF_EVT);
+  Util_constructClock(&advOnClock, SimpleBLEPeripheral_clockHandler,
+                      ADV_OFF_DURATION, 0, false, SBP_ADV_ON_EVT);
+
+  GAP_SetParamValue(TGAP_CONN_PAUSE_PERIPHERAL, DEFAULT_CONN_PAUSE_PERIPHERAL);
+
+  {
+    uint8_t initialAdvertEnable = TRUE;
+    uint16_t advertOffTime = 0;
+    uint8_t enableUpdateRequest = DEFAULT_ENABLE_UPDATE_REQUEST;
+    uint16_t desiredMinInterval = DEFAULT_DESIRED_MIN_CONN_INTERVAL;
+    uint16_t desiredMaxInterval = DEFAULT_DESIRED_MAX_CONN_INTERVAL;
+    uint16_t desiredSlaveLatency = DEFAULT_DESIRED_SLAVE_LATENCY;
+    uint16_t desiredConnTimeout = DEFAULT_DESIRED_CONN_TIMEOUT;
+
+    GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &initialAdvertEnable);
+    
+    // Allows the device to answer 'Scan Requests' from the phone and send the name!
+    uint8_t advType = GAP_ADTYPE_ADV_SCAN_IND; 
+    GAPRole_SetParameter(GAPROLE_ADV_EVENT_TYPE, sizeof(uint8_t), &advType);
+    
+    GAPRole_SetParameter(GAPROLE_ADVERT_OFF_TIME, sizeof(uint16_t), &advertOffTime);
+    GAPRole_SetParameter(GAPROLE_SCAN_RSP_DATA, sizeof(scanRspData), scanRspData);
+    GAPRole_SetParameter(GAPROLE_ADVERT_DATA, sizeof(advertData), advertData);
+    GAPRole_SetParameter(GAPROLE_PARAM_UPDATE_ENABLE, sizeof(uint8_t), &enableUpdateRequest);
+    GAPRole_SetParameter(GAPROLE_MIN_CONN_INTERVAL, sizeof(uint16_t), &desiredMinInterval);
+    GAPRole_SetParameter(GAPROLE_MAX_CONN_INTERVAL, sizeof(uint16_t), &desiredMaxInterval);
+    GAPRole_SetParameter(GAPROLE_SLAVE_LATENCY, sizeof(uint16_t), &desiredSlaveLatency);
+    GAPRole_SetParameter(GAPROLE_TIMEOUT_MULTIPLIER, sizeof(uint16_t), &desiredConnTimeout);
+  }
+
+  GGS_SetParameter(GGS_DEVICE_NAME_ATT, GAP_DEVICE_NAME_LEN, attDeviceName);
+
+  {
+    uint16_t advInt = DEFAULT_ADVERTISING_INTERVAL;
+    GAP_SetParamValue(TGAP_LIM_DISC_ADV_INT_MIN, advInt);
+    GAP_SetParamValue(TGAP_LIM_DISC_ADV_INT_MAX, advInt);
+    GAP_SetParamValue(TGAP_GEN_DISC_ADV_INT_MIN, advInt);
+    GAP_SetParamValue(TGAP_GEN_DISC_ADV_INT_MAX, advInt);
+  }
+
+  {
+    uint32_t passkey = 0;
+    uint8_t pairMode = GAPBOND_PAIRING_MODE_WAIT_FOR_REQ;
+    uint8_t mitm = TRUE;
+    uint8_t ioCap = GAPBOND_IO_CAP_DISPLAY_ONLY;
+    uint8_t bonding = TRUE;
+
+    GAPBondMgr_SetParameter(GAPBOND_DEFAULT_PASSCODE, sizeof(uint32_t), &passkey);
+    GAPBondMgr_SetParameter(GAPBOND_PAIRING_MODE, sizeof(uint8_t), &pairMode);
+    GAPBondMgr_SetParameter(GAPBOND_MITM_PROTECTION, sizeof(uint8_t), &mitm);
+    GAPBondMgr_SetParameter(GAPBOND_IO_CAPABILITIES, sizeof(uint8_t), &ioCap);
+    GAPBondMgr_SetParameter(GAPBOND_BONDING_ENABLED, sizeof(uint8_t), &bonding);
+  }
+
+  GGS_AddService(GATT_ALL_SERVICES);
+  GATTServApp_AddService(GATT_ALL_SERVICES);
+  DevInfo_AddService();
+
+#ifndef FEATURE_OAD_ONCHIP
+  SimpleProfile_AddService(GATT_ALL_SERVICES);
+#endif //!FEATURE_OAD_ONCHIP
+
+  /* --------- SENSOR INIT --------- */
+  I2C_init();
+
+  // --- MEMORY RESTORE, BACKUP, OR RESET LOGIC ---
+  uint32_t resetSource = SysCtrlResetSourceGet();
+
+  if (resetSource == RSTSRC_PIN_RESET) 
+  {
+      // 1. User pressed the physical RESET button. Wipe memory to 0.
+      hoursUptime = 0;
+      cumulativeMaturity = 0.0f;
+      osal_snv_write(0x80, sizeof(uint32_t), &hoursUptime);
+      osal_snv_write(0x82, sizeof(float), &cumulativeMaturity);
+      osal_snv_write(0x84, sizeof(uint32_t), &hoursUptime);      // Backup
+      osal_snv_write(0x86, sizeof(float), &cumulativeMaturity);  // Backup
+  } 
+  else 
+  {
+      // 2. Read Primary Memory
+      uint8_t readTime = osal_snv_read(0x80, sizeof(uint32_t), &hoursUptime);
+      uint8_t readMat  = osal_snv_read(0x82, sizeof(float), &cumulativeMaturity);
+
+      if (readTime == SUCCESS && readMat == SUCCESS && 
+          cumulativeMaturity >= 0.0f && cumulativeMaturity <= 100000.0f) 
+      {
+          // Primary Memory is fully intact and logical. Proceed silently!
+      } 
+      else 
+      {
+          // Primary Memory failed or corrupted. Try to recover from the BACKUP location.
+          uint8_t b_readTime = osal_snv_read(0x84, sizeof(uint32_t), &hoursUptime);
+          uint8_t b_readMat  = osal_snv_read(0x86, sizeof(float), &cumulativeMaturity);
+
+          if (b_readTime == SUCCESS && b_readMat == SUCCESS && 
+              cumulativeMaturity >= 0.0f && cumulativeMaturity <= 100000.0f) 
+          {
+              // BACKUP WORKED! THIS IS THE PREVIOUS CORRECT VALUE!
+              int matWhole = (int)cumulativeMaturity;
+              int matFrac = (int)((cumulativeMaturity - matWhole) * 10000); 
+              if (matFrac < 0) matFrac = -matFrac;
+
+              // Instantly rewrite the backup data into the primary slot to fix the corruption
+              osal_snv_write(0x80, sizeof(uint32_t), &hoursUptime);
+              osal_snv_write(0x82, sizeof(float), &cumulativeMaturity);
+          }
+          else
+          {
+              // BOTH PRIMARY AND BACKUP FAILED. 
+              // We have physically lost the previous correct value. We must start at 0.
+              hoursUptime = 0;
+              cumulativeMaturity = 0.0f;
+              osal_snv_write(0x80, sizeof(uint32_t), &hoursUptime);
+              osal_snv_write(0x82, sizeof(float), &cumulativeMaturity);
+              osal_snv_write(0x84, sizeof(uint32_t), &hoursUptime);      // Backup
+              osal_snv_write(0x86, sizeof(float), &cumulativeMaturity);  // Backup
+          }
+      }
+  }
+  
+  // Format the initial BLE payload based on the recovered (or reset) value
+  int matWhole = (int)cumulativeMaturity;
+  int matFrac = (int)((cumulativeMaturity - matWhole) * 10000); 
+  if (matFrac < 0) matFrac = -matFrac;
+
+  advertData[7]  = '0' + (matWhole / 1000) % 10;
+  advertData[8]  = '0' + (matWhole / 100) % 10;
+  advertData[9]  = '0' + (matWhole / 10) % 10;
+  advertData[10] = '0' + (matWhole % 10);
+  advertData[12] = '0' + (matFrac / 1000) % 10;
+  advertData[13] = '0' + (matFrac / 100) % 10;
+  advertData[14] = '0' + (matFrac / 10) % 10;
+  advertData[15] = '0' + (matFrac % 10);
+
+  GAPRole_SetParameter(GAPROLE_ADVERT_DATA, sizeof(advertData), advertData);
+
+  VOID GAPRole_StartDevice(&SimpleBLEPeripheral_gapRoleCBs);
+  VOID GAPBondMgr_Register(&simpleBLEPeripheral_BondMgrCBs);
+  GAP_RegisterForMsgs(selfEntity);
+  GATT_RegisterForMsgs(selfEntity);
+  HCI_LE_ReadMaxDataLenCmd();
+
+  // Advertising defaults to ON during init, so start the countdown to turn it OFF
+  Util_startClock(&advOffClock);
+}
+
+static void SimpleBLEPeripheral_taskFxn(UArg a0, UArg a1)
+{
+  SimpleBLEPeripheral_init();
+
+  for (;;)
+  {
+    ICall_Errno errno = ICall_wait(ICALL_TIMEOUT_FOREVER);
+
+    if (errno == ICALL_ERRNO_SUCCESS)
+    {
+      ICall_EntityID dest;
+      ICall_ServiceEnum src;
+      ICall_HciExtEvt *pMsg = NULL;
+
+      if (ICall_fetchServiceMsg(&src, &dest, (void **)&pMsg) == ICALL_ERRNO_SUCCESS)
+      {
+        uint8 safeToDealloc = TRUE;
+
+        if ((src == ICALL_SERVICE_CLASS_BLE) && (dest == selfEntity))
+        {
+          ICall_Stack_Event *pEvt = (ICall_Stack_Event *)pMsg;
+
+          if (pEvt->signature == 0xffff)
+          {
+            if (pEvt->event_flag & SBP_CONN_EVT_END_EVT)
+            {
+              SimpleBLEPeripheral_sendAttRsp();
+            }
+          }
+          else
+          {
+            safeToDealloc = SimpleBLEPeripheral_processStackMsg((ICall_Hdr *)pMsg);
+          }
+        }
+
+        if (pMsg && safeToDealloc)
+        {
+          ICall_freeMsg(pMsg);
+        }
+      }
+
+      while (!Queue_empty(appMsgQueue))
+      {
+        sbpEvt_t *pMsg = (sbpEvt_t *)Util_dequeueMsg(appMsgQueue);
+        if (pMsg)
+        {
+          SimpleBLEPeripheral_processAppMsg(pMsg);
+          ICall_free(pMsg);
+        }
+      }
+    }
+
+    // --- BLE SLEEP TIMERS HANDLING ---
+    if (events & SBP_ADV_OFF_EVT)
+    {
+      events &= ~SBP_ADV_OFF_EVT;
+      isBLEAdvertising = false;
+      
+      uint8_t advertEnable = FALSE;
+      GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &advertEnable);
+      
+      // Start the 3-min sleep countdown
+      Util_startClock(&advOnClock);
+    }
+
+    if (events & SBP_ADV_ON_EVT)
+    {
+      events &= ~SBP_ADV_ON_EVT;
+      isBLEAdvertising = true;
+      
+      uint8_t advertEnable = TRUE;
+      GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &advertEnable);
+      
+      // Start the 10-sec active countdown
+      Util_startClock(&advOffClock);
+    }
+
+    // --- SENSOR PERIODIC TASK ---
+    if (events & SBP_PERIODIC_EVT)
+    {
+      events &= ~SBP_PERIODIC_EVT;
+      Util_startClock(&periodicClock);
+      SimpleBLEPeripheral_performPeriodicTask();
+    }
+  }
+}
+
+static uint8_t SimpleBLEPeripheral_processStackMsg(ICall_Hdr *pMsg)
+{
+  uint8_t safeToDealloc = TRUE;
+
+  switch (pMsg->event)
+  {
+    case GATT_MSG_EVENT:
+      safeToDealloc = SimpleBLEPeripheral_processGATTMsg((gattMsgEvent_t *)pMsg);
+      break;
+
+    case HCI_GAP_EVENT_EVENT:
+      {
+        switch(pMsg->status)
+        {
+          case HCI_COMMAND_COMPLETE_EVENT_CODE:
+            break;
+          case HCI_BLE_HARDWARE_ERROR_EVENT_CODE:
+            AssertHandler(HAL_ASSERT_CAUSE_HARDWARE_ERROR,0);
+            break;
+          default:
+            break;
+        }
+      }
+      break;
+
+    default:
+      break;
+  }
+  return (safeToDealloc);
+}
+
+static uint8_t SimpleBLEPeripheral_processGATTMsg(gattMsgEvent_t *pMsg)
+{
+  if (pMsg->hdr.status == blePending)
+  {
+    if (HCI_EXT_ConnEventNoticeCmd(pMsg->connHandle, selfEntity, SBP_CONN_EVT_END_EVT) == SUCCESS)
+    {
+      SimpleBLEPeripheral_freeAttRsp(FAILURE);
+      pAttRsp = pMsg;
+      return (FALSE);
+    }
+  }
+  GATT_bm_free(&pMsg->msg, pMsg->method);
+  return (TRUE);
+}
+
+static void SimpleBLEPeripheral_sendAttRsp(void)
+{
+  if (pAttRsp != NULL)
+  {
+    uint8_t status;
+    rspTxRetry++;
+    status = GATT_SendRsp(pAttRsp->connHandle, pAttRsp->method, &(pAttRsp->msg));
+    if ((status != blePending) && (status != MSG_BUFFER_NOT_AVAIL))
+    {
+      HCI_EXT_ConnEventNoticeCmd(pAttRsp->connHandle, selfEntity, 0);
+      SimpleBLEPeripheral_freeAttRsp(status);
+    }
+  }
+}
+
+static void SimpleBLEPeripheral_freeAttRsp(uint8_t status)
+{
+  if (pAttRsp != NULL)
+  {
+    if (status != SUCCESS)
+    {
+      GATT_bm_free(&pAttRsp->msg, pAttRsp->method);
+    }
+    ICall_freeMsg(pAttRsp);
+    pAttRsp = NULL;
+    rspTxRetry = 0;
+  }
+}
+
+static void SimpleBLEPeripheral_processAppMsg(sbpEvt_t *pMsg)
+{
+  switch (pMsg->hdr.event)
+  {
+    case SBP_STATE_CHANGE_EVT:
+      SimpleBLEPeripheral_processStateChangeEvt((gaprole_States_t)pMsg->hdr.state);
+      break;
+    case SBP_CHAR_CHANGE_EVT:
+      SimpleBLEPeripheral_processCharValueChangeEvt(pMsg->hdr.state);
+      break;
+    default:
+      break;
+  }
+}
+
+static void SimpleBLEPeripheral_stateChangeCB(gaprole_States_t newState)
+{
+  SimpleBLEPeripheral_enqueueMsg(SBP_STATE_CHANGE_EVT, newState);
+}
+
+static void SimpleBLEPeripheral_processStateChangeEvt(gaprole_States_t newState)
+{
+  switch ( newState )
+  {
+    case GAPROLE_STARTED:
+      {
+        uint8_t ownAddress[B_ADDR_LEN];
+        uint8_t systemId[DEVINFO_SYSTEM_ID_LEN];
+
+        GAPRole_GetParameter(GAPROLE_BD_ADDR, ownAddress);
+
+        systemId[0] = ownAddress[0];
+        systemId[1] = ownAddress[1];
+        systemId[2] = ownAddress[2];
+        systemId[4] = 0x00;
+        systemId[3] = 0x00;
+        systemId[7] = ownAddress[5];
+        systemId[6] = ownAddress[4];
+        systemId[5] = ownAddress[3];
+
+        DevInfo_SetParameter(DEVINFO_SYSTEM_ID, DEVINFO_SYSTEM_ID_LEN, systemId);
+      }
+      break;
+
+    case GAPROLE_ADVERTISING:
+      break;
+
+    case GAPROLE_CONNECTED:
+      {
+        linkDBInfo_t linkInfo;
+        uint8_t numActive = 0;
+        numActive = linkDB_NumActive();
+
+        if ( linkDB_GetInfo( numActive - 1, &linkInfo ) == SUCCESS )
+        {
+          // Empty
+        }
+      }
+      break;
+
+    case GAPROLE_CONNECTED_ADV:
+      break;
+
+    case GAPROLE_WAITING:
+      {
+        // Re-enable advertising ONLY if we are currently inside our 10-sec ON window
+        uint8_t advertReEnable = isBLEAdvertising ? TRUE : FALSE;
+        SimpleBLEPeripheral_freeAttRsp(bleNotConnected);
+        GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &advertReEnable);
+      }
+      break;
+
+    case GAPROLE_WAITING_AFTER_TIMEOUT:
+      SimpleBLEPeripheral_freeAttRsp(bleNotConnected);
+      break;
+
+    case GAPROLE_ERROR:
+      break;
+
+    default:
+      break;
+  }
+}
+
+#ifndef FEATURE_OAD_ONCHIP
+static void SimpleBLEPeripheral_charValueChangeCB(uint8_t paramID)
+{
+  SimpleBLEPeripheral_enqueueMsg(SBP_CHAR_CHANGE_EVT, paramID);
+}
+#endif //!FEATURE_OAD_ONCHIP
+
+static void SimpleBLEPeripheral_processCharValueChangeEvt(uint8_t paramID)
+{
+#ifndef FEATURE_OAD_ONCHIP
+  uint8_t newValue;
+  switch(paramID)
+  {
+    case SIMPLEPROFILE_CHAR1:
+      SimpleProfile_GetParameter(SIMPLEPROFILE_CHAR1, &newValue);
+      
+      // --- NEW: BLUETOOTH MEMORY WIPE COMMAND ---
+      if (newValue == 0) // If you send a "0" from your phone
+      {
+          hoursUptime = 0;
+          cumulativeMaturity = 0.0f;
+          osal_snv_write(0x80, sizeof(uint32_t), &hoursUptime);
+          osal_snv_write(0x82, sizeof(float), &cumulativeMaturity);
+          osal_snv_write(0x84, sizeof(uint32_t), &hoursUptime);      // Backup
+          osal_snv_write(0x86, sizeof(float), &cumulativeMaturity);  // Backup
+
+          // Update the live BLE advertising payload to show 0000.0000 instantly
+          advertData[7]  = '0'; advertData[8]  = '0'; advertData[9]  = '0'; advertData[10] = '0';
+          advertData[12] = '0'; advertData[13] = '0'; advertData[14] = '0'; advertData[15] = '0';
+          
+          if (isBLEAdvertising) {
+              uint8_t advertEnable = FALSE;
+              GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &advertEnable); 
+              GAPRole_SetParameter(GAPROLE_ADVERT_DATA, sizeof(advertData), advertData);
+              advertEnable = TRUE;
+              GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &advertEnable); 
+          } else {
+              GAPRole_SetParameter(GAPROLE_ADVERT_DATA, sizeof(advertData), advertData);
+          }
+      }
+      break;
+
+      case SIMPLEPROFILE_CHAR3:
+      SimpleProfile_GetParameter(SIMPLEPROFILE_CHAR3, &newValue);
+      break;
+  }
+#endif //!FEATURE_OAD_ONCHIP
+}
+
+static void SimpleBLEPeripheral_performPeriodicTask(void)
+{
+    // 1. OPEN THE I2C DRIVER
+    I2C_Params i2cParams;
+    I2C_Params_init(&i2cParams);
+    i2cParams.bitRate = I2C_400kHz;
+    i2c = I2C_open(Board_I2C, &i2cParams);
+
+    if(i2c == NULL) {
+        return; // Abort this cycle if it fails
+    }
+
+    uint8_t txBuf[1] = {0x00}; 
+    uint8_t rxBuf[2] = {0, 0}; 
+    I2C_Transaction i2cTransaction;
+
+    memset(&i2cTransaction, 0, sizeof(I2C_Transaction));
+
+    i2cTransaction.slaveAddress = 0x48;
+    i2cTransaction.writeBuf   = txBuf;
+    i2cTransaction.writeCount = 1;
+    i2cTransaction.readBuf    = rxBuf;
+    i2cTransaction.readCount  = 2;
+
+    if (I2C_transfer(i2c, &i2cTransaction))
+    {
+        // 2. SUCCESSFULLY READ -> IMMEDIATELY CLOSE THE DRIVER SO THE CHIP CAN SLEEP
+        I2C_close(i2c);
+
+        // 1. Read and Convert Temperature
+        int16_t rawTemp = (rxBuf[0] << 4) | (rxBuf[1] >> 4);
+        if (rawTemp & 0x0800) rawTemp |= 0xF000;
+        float currentTemp = rawTemp * 0.0625f;
+
+        // 2. Add to Running Sum (Accumulator)
+        tempAccumulator += currentTemp;
+        sampleCount++;
+
+        // 3. THE 1-HOUR MARK (6 Readings Collected over 60 mins)
+        if (sampleCount >= 6) 
+        {
+            hoursUptime++;
+
+            // A. Calculate Average (Ta) for this 1-Hour window
+            float averageTemp = tempAccumulator / 6.0f;
+
+            // B. Calculate the NEW Maturity Slice for this 1-HOUR window
+            float previousMaturity = cumulativeMaturity; 
+            float newMaturitySlice = 0.0f;
+
+            if (averageTemp > DATUM_TEMPERATURE) {
+                float timeStepHours = 1.0f; // Represents exactly 1 hour
+                newMaturitySlice = (averageTemp - DATUM_TEMPERATURE) * timeStepHours;
+                cumulativeMaturity = previousMaturity + newMaturitySlice; 
+            }
+
+            int matWhole = (int)cumulativeMaturity;
+            int matFrac = (int)((cumulativeMaturity - matWhole) * 10000); 
+            if (matFrac < 0) matFrac = -matFrac;
+            
+            // C. Save the NEW GRAND TOTAL back into Flash Memory (PRIMARY & BACKUP)
+            osal_snv_write(0x80, sizeof(uint32_t), &hoursUptime);
+            osal_snv_write(0x82, sizeof(float), &cumulativeMaturity);
+            osal_snv_write(0x84, sizeof(uint32_t), &hoursUptime);      // Backup
+            osal_snv_write(0x86, sizeof(float), &cumulativeMaturity);  // Backup
+
+            // --- E. UPDATE THE LIVE BLE ADVERTISING PAYLOAD ---
+            advertData[7]  = '0' + (matWhole / 1000) % 10;
+            advertData[8]  = '0' + (matWhole / 100) % 10;
+            advertData[9]  = '0' + (matWhole / 10) % 10;
+            advertData[10] = '0' + (matWhole % 10);
+            advertData[12] = '0' + (matFrac / 1000) % 10;
+            advertData[13] = '0' + (matFrac / 100) % 10;
+            advertData[14] = '0' + (matFrac / 10) % 10;
+            advertData[15] = '0' + (matFrac % 10);
+            
+            // Apply the new data to the GAP packet buffer
+            if (isBLEAdvertising) {
+                // Temporarily pause to safely inject if actively advertising
+                uint8_t advertEnable = FALSE;
+                GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &advertEnable); 
+                GAPRole_SetParameter(GAPROLE_ADVERT_DATA, sizeof(advertData), advertData);
+                
+                advertEnable = TRUE;
+                GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &advertEnable); 
+            } else {
+                // Device is in sleep mode. Just update the buffer silently.
+                GAPRole_SetParameter(GAPROLE_ADVERT_DATA, sizeof(advertData), advertData);
+            }
+
+            // F. Reset accumulator and counter for the next hour
+            tempAccumulator = 0.0f;
+            sampleCount = 0;
+        }
+    }
+    else
+    {
+        // READ FAILED -> STILL CLOSE THE DRIVER SO IT DOESN'T GET STUCK OPEN!
+        I2C_close(i2c);
+    }
+}
+
+static void SimpleBLEPeripheral_clockHandler(UArg arg)
+{
+  events |= arg;
+  Semaphore_post(sem);
+}
+
+static void SimpleBLEPeripheral_enqueueMsg(uint8_t event, uint8_t state)
+{
+  sbpEvt_t *pMsg;
+  if ((pMsg = ICall_malloc(sizeof(sbpEvt_t))))
+  {
+    pMsg->hdr.event = event;
+    pMsg->hdr.state = state;
+    Util_enqueueMsg(appMsgQueue, sem, (uint8*)pMsg);
+  }
+}

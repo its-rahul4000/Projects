@@ -1,0 +1,1 @@
+C:\ti\simplelink\ble_sdk_2_02_05_02\src\boards\CC2650_LAUNCHXL

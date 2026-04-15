@@ -1,0 +1,31 @@
+TMP1075  →  CC2650 MODA
+---------------------------
+SDA      →  DIO_0   (I2C Data)
+SCL      →  DIO_1   (I2C Clock)
+VCC      →  VDD
+GND      →  GND
+
+
+Winbond Flash  →  CC2650 MODA
+--------------------------------
+CLK            →  DIO_8    (SPI Clock)
+DI (MOSI)      →  DIO_9    (Master → Slave)
+DO (MISO)      →  DIO_10   (Slave → Master)
+CS             →  DIO_11   (Chip Select)
+VCC            →  VDD
+GND            →  GND
+
+
+LaunchPad     →  CC2650 MODA(Serial Console Uart)
+--------------------------------
+RX            →  IOID_6/JTAG_TDI
+TX            ←  IOID_5/JTAG_TDO
+
+
+LaunchPad  →  CC2650 MODA
+----------------------------
+RST        →  RESET_N
+TCK        →  JTAG_TCK
+TMS        →  JTAG_TMS
+GND        ↔  GND
+3V3        →  VDD

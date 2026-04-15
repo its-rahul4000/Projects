@@ -1,0 +1,775 @@
+/******************************************************************************
+// ---- 60 Min interval BLE Advertising with 10-Min SNV Backup ----
+// ---- PURE Deployment: NO UART, NO SPI, 2-Hour Hold, Scannable Beacon ----
+
+ @file  simple_peripheral.c
+
+ @brief This file contains the Simple BLE Peripheral sample application for use
+        with the CC2650 Bluetooth Low Energy Protocol Stack.
+ *****************************************************************************/
+
+/*********************************************************************
+ * INCLUDES
+ */
+#include <string.h>
+#include <stdbool.h>
+#include <math.h>   
+
+#include <ti/sysbios/knl/Task.h>
+#include <ti/sysbios/knl/Clock.h>
+#include <ti/sysbios/knl/Semaphore.h>
+#include <ti/sysbios/knl/Queue.h>
+
+#include <ti/drivers/I2C.h>
+#include <ti/drivers/PIN.h>
+#include <ti/mw/display/Display.h> // Included ONLY to satisfy external linker
+
+#include "hci_tl.h"
+#include "gatt.h"
+#include "linkdb.h"
+#include "gapgattserver.h"
+#include "gattservapp.h"
+#include "devinfoservice.h"
+#include "simple_gatt_profile.h"
+
+#if defined(FEATURE_OAD) || defined(IMAGE_INVALIDATE)
+#include "oad_target.h"
+#include "oad.h"
+#endif 
+
+#include "peripheral.h"
+#include "gapbondmgr.h"
+#include "gap.h"
+
+#include "osal_snv.h" 
+#include "icall_apimsg.h"
+#include "util.h"
+
+#ifdef USE_RCOSC
+#include "rcosc_calibration.h"
+#endif 
+
+#include "board_key.h"
+#include "board.h"
+#include "simple_peripheral.h"
+
+#include <driverlib/sys_ctrl.h>
+
+#if defined( USE_FPGA ) || defined( DEBUG_SW_TRACE )
+#include <driverlib/ioc.h>
+#endif 
+
+/*********************************************************************
+ * CONSTANTS & DEFINES
+ */
+#define DEFAULT_ADVERTISING_INTERVAL          1600  //Packet transmit every 1sec
+#define DEFAULT_DISCOVERABLE_MODE             GAP_ADTYPE_FLAGS_GENERAL
+#define DEFAULT_DESIRED_MIN_CONN_INTERVAL     80
+#define DEFAULT_DESIRED_MAX_CONN_INTERVAL     800
+#define DEFAULT_DESIRED_SLAVE_LATENCY         0
+#define DEFAULT_DESIRED_CONN_TIMEOUT          1000
+#define DEFAULT_ENABLE_UPDATE_REQUEST         GAPROLE_LINK_PARAM_UPDATE_INITIATE_BOTH_PARAMS
+#define DEFAULT_CONN_PAUSE_PERIPHERAL         6
+
+// --- SENSOR TIMING (10 Minutes per sample) ---
+#define SBP_PERIODIC_EVT_PERIOD               600000 
+
+// --- BLE DUTY CYCLE TIMINGS ---
+#define ADV_ON_DURATION                       12000   // 12 Seconds awake
+#define ADV_OFF_DURATION                      300000  // 5 Minutes asleep
+
+#define SBP_TASK_PRIORITY                     1
+#define SBP_TASK_STACK_SIZE                   1024 
+
+#define SBP_STATE_CHANGE_EVT                  0x0001
+#define SBP_CHAR_CHANGE_EVT                   0x0002
+#define SBP_PERIODIC_EVT                      0x0004
+#define SBP_CONN_EVT_END_EVT                  0x0008
+#define SBP_ADV_OFF_EVT                       0x0020  
+#define SBP_ADV_ON_EVT                        0x0040  
+
+#define SNV_ID_UPTIME                         0x80
+#define SNV_ID_MATURITY                       0x82
+#define SNV_ID_STRENGTH                       0x84    
+#define SNV_ID_SAMPLE_COUNT                   0x86    
+#define SNV_ID_TEMP_ACCUM                     0x88    
+
+#define STRENGTH_CONST_A                     -35.4926f   
+#define STRENGTH_CONST_B                      7.5004f  
+
+typedef struct {
+    appEvtHdr_t hdr; 
+} sbpEvt_t;
+
+/*********************************************************************
+ * GLOBAL VARIABLES
+ */
+// Defined strictly to satisfy Linker Error #10234-D
+Display_Handle dispHandle = NULL; 
+
+static I2C_Handle i2c;
+
+#define DATUM_TEMPERATURE -10.0f
+static float    tempAccumulator    = 0.0f;
+static uint8_t  sampleCount        = 0;
+static uint32_t hoursUptime        = 0;       
+static float    cumulativeMaturity = 0.0f;
+static float    compressiveStrength= 0.0f;    
+static float    lastGoodTemp       = 25.0f;   
+
+static uint8_t  deploymentHoldCounter = 0;
+
+static gaprole_States_t gapProfileState = GAPROLE_INIT; 
+
+/*********************************************************************
+ * LOCAL VARIABLES
+ */
+static ICall_EntityID selfEntity;
+static ICall_Semaphore sem;
+static Clock_Struct periodicClock;
+static Clock_Struct advOffClock;
+static Clock_Struct advOnClock;
+static bool isBLEAdvertising = true;
+static Queue_Struct appMsg;
+static Queue_Handle appMsgQueue;
+static uint16_t events;
+Task_Struct sbpTask;
+Char sbpTaskStack[SBP_TASK_STACK_SIZE];
+
+static uint8_t scanRspData[] = {
+    0x0E, GAP_ADTYPE_LOCAL_NAME_COMPLETE,
+    'C','o','m','p',' ','S','t','r','e','n','g','t','h'
+};
+
+static uint8_t advertData[] = {
+    0x02, GAP_ADTYPE_FLAGS, GAP_ADTYPE_FLAGS_GENERAL | GAP_ADTYPE_FLAGS_BREDR_NOT_SUPPORTED,
+    0x0E, GAP_ADTYPE_MANUFACTURER_SPECIFIC, 0x0D, 0x00, 
+    '0','0','0','0','0','0','.','0','0','0','0' 
+};
+
+static uint8_t attDeviceName[GAP_DEVICE_NAME_LEN] = "Comp Strength";
+static gattMsgEvent_t *pAttRsp = NULL;
+static uint8_t rspTxRetry = 0;
+
+/*********************************************************************
+ * LOCAL FUNCTIONS
+ */
+static void SimpleBLEPeripheral_init( void );
+static void SimpleBLEPeripheral_taskFxn(UArg a0, UArg a1);
+static uint8_t SimpleBLEPeripheral_processStackMsg(ICall_Hdr *pMsg);
+static uint8_t SimpleBLEPeripheral_processGATTMsg(gattMsgEvent_t *pMsg);
+static void SimpleBLEPeripheral_processAppMsg(sbpEvt_t *pMsg);
+static void SimpleBLEPeripheral_processStateChangeEvt(gaprole_States_t newState);
+static void SimpleBLEPeripheral_processCharValueChangeEvt(uint8_t paramID);
+static void SimpleBLEPeripheral_performPeriodicTask(void);
+static void SimpleBLEPeripheral_clockHandler(UArg arg);
+static void SimpleBLEPeripheral_sendAttRsp(void);
+static void SimpleBLEPeripheral_freeAttRsp(uint8_t status);
+static void SimpleBLEPeripheral_stateChangeCB(gaprole_States_t newState);
+static void initSensor(void); 
+
+#ifndef FEATURE_OAD_ONCHIP
+static void SimpleBLEPeripheral_charValueChangeCB(uint8_t paramID);
+#endif 
+
+static void SimpleBLEPeripheral_enqueueMsg(uint8_t event, uint8_t state);
+
+extern void AssertHandler(uint8 assertCause, uint8 assertSubcause);
+
+static gapRolesCBs_t SimpleBLEPeripheral_gapRoleCBs = { SimpleBLEPeripheral_stateChangeCB };
+static gapBondCBs_t simpleBLEPeripheral_BondMgrCBs = { NULL, NULL };
+
+#ifndef FEATURE_OAD_ONCHIP
+static simpleProfileCBs_t SimpleBLEPeripheral_simpleProfileCBs = { SimpleBLEPeripheral_charValueChangeCB };
+#endif 
+
+/*********************************************************************
+ * PUBLIC FUNCTIONS
+ */
+void SimpleBLEPeripheral_createTask(void)
+{
+    Task_Params taskParams;
+    Task_Params_init(&taskParams);
+    taskParams.stack = sbpTaskStack;
+    taskParams.stackSize = SBP_TASK_STACK_SIZE;
+    taskParams.priority = SBP_TASK_PRIORITY;
+    Task_construct(&sbpTask, SimpleBLEPeripheral_taskFxn, &taskParams, NULL);
+}
+
+static void initSensor(void) 
+{
+    I2C_Params i2cParams;
+    I2C_Params_init(&i2cParams);
+    i2cParams.bitRate = I2C_400kHz;
+    i2c = I2C_open(Board_I2C, &i2cParams);
+
+    if (i2c == NULL) return;
+
+    uint8_t txBuf[1] = {0x00};
+    uint8_t rxBuf[2] = {0, 0}; 
+    
+    I2C_Transaction i2cTransaction;
+    memset(&i2cTransaction, 0, sizeof(I2C_Transaction));
+    i2cTransaction.slaveAddress = 0x48;
+    i2cTransaction.writeBuf     = txBuf; 
+    i2cTransaction.writeCount   = 1;
+    i2cTransaction.readBuf      = rxBuf; 
+    i2cTransaction.readCount    = 2;
+
+    I2C_transfer(i2c, &i2cTransaction);
+    I2C_close(i2c);
+}
+
+static void SimpleBLEPeripheral_init(void)
+{
+    ICall_registerApp(&selfEntity, &sem);
+
+#ifdef USE_RCOSC
+    RCOSC_enableCalibration();
+#endif 
+
+    appMsgQueue = Util_constructQueue(&appMsg);
+    
+    Util_constructClock(&periodicClock, SimpleBLEPeripheral_clockHandler,
+                        SBP_PERIODIC_EVT_PERIOD, SBP_PERIODIC_EVT_PERIOD, true, SBP_PERIODIC_EVT);
+
+    Util_constructClock(&advOffClock, SimpleBLEPeripheral_clockHandler,
+                        ADV_ON_DURATION, 0, false, SBP_ADV_OFF_EVT);
+    Util_constructClock(&advOnClock, SimpleBLEPeripheral_clockHandler,
+                        ADV_OFF_DURATION, 0, false, SBP_ADV_ON_EVT);
+
+    initSensor();
+
+    GAP_SetParamValue(TGAP_CONN_PAUSE_PERIPHERAL, DEFAULT_CONN_PAUSE_PERIPHERAL);
+
+    uint32_t resetSource = SysCtrlResetSourceGet();
+
+    if (resetSource == RSTSRC_PIN_RESET) 
+    {
+        hoursUptime = 0;
+        cumulativeMaturity = 0.0f;
+        compressiveStrength = 0.0f;
+        sampleCount = 0;           
+        tempAccumulator = 0.0f;    
+        
+        deploymentHoldCounter = 12;
+        
+        osal_snv_write(SNV_ID_UPTIME, sizeof(uint32_t), &hoursUptime);
+        osal_snv_write(SNV_ID_MATURITY, sizeof(float), &cumulativeMaturity);
+        osal_snv_write(SNV_ID_STRENGTH, sizeof(float), &compressiveStrength);
+        osal_snv_write(SNV_ID_SAMPLE_COUNT, sizeof(uint8_t), &sampleCount); 
+        osal_snv_write(SNV_ID_TEMP_ACCUM, sizeof(float), &tempAccumulator); 
+    } 
+    else 
+    {
+        uint8_t readTime = osal_snv_read(SNV_ID_UPTIME, sizeof(uint32_t), &hoursUptime);
+        uint8_t readMat  = osal_snv_read(SNV_ID_MATURITY, sizeof(float), &cumulativeMaturity);
+        uint8_t readStr  = osal_snv_read(SNV_ID_STRENGTH, sizeof(float), &compressiveStrength);
+        
+        uint8_t readSamp = osal_snv_read(SNV_ID_SAMPLE_COUNT, sizeof(uint8_t), &sampleCount);
+        uint8_t readAcc  = osal_snv_read(SNV_ID_TEMP_ACCUM, sizeof(float), &tempAccumulator);
+        
+        if (readSamp != SUCCESS || readAcc != SUCCESS || sampleCount >= 6) 
+        {
+            sampleCount = 0;
+            tempAccumulator = 0.0f;
+        }
+        
+        if (readTime == SUCCESS && readMat == SUCCESS && cumulativeMaturity >= 0.0f && cumulativeMaturity <= 1000000.0f) 
+        {
+            if (readStr != SUCCESS && cumulativeMaturity > 0.0f) {
+                compressiveStrength = STRENGTH_CONST_A + STRENGTH_CONST_B * logf(cumulativeMaturity);
+                if (compressiveStrength < 0.0f) compressiveStrength = 0.0f;
+            }
+
+            if (hoursUptime == 0 && sampleCount == 0) 
+            {
+                deploymentHoldCounter = 12;
+            } 
+            else 
+            {
+                deploymentHoldCounter = 0; 
+            }
+        } 
+        else 
+        {
+            hoursUptime = 0; 
+            cumulativeMaturity = 0.0f;
+            compressiveStrength = 0.0f;
+            sampleCount = 0;
+            tempAccumulator = 0.0f;
+            
+            deploymentHoldCounter = 12;
+        }
+    }
+    
+    int strWhole = (int)compressiveStrength;
+    int strFrac  = (int)((compressiveStrength - strWhole) * 10000); 
+    if (strFrac < 0) strFrac = -strFrac;
+    if (strWhole < 0) strWhole = 0; 
+    
+    advertData[7]  = '0' + (strWhole / 100000) % 10;
+    advertData[8]  = '0' + (strWhole / 10000) % 10;
+    advertData[9]  = '0' + (strWhole / 1000) % 10;
+    advertData[10] = '0' + (strWhole / 100) % 10;
+    advertData[11] = '0' + (strWhole / 10) % 10;
+    advertData[12] = '0' + (strWhole % 10);
+    
+    advertData[14] = '0' + (strFrac / 1000) % 10;
+    advertData[15] = '0' + (strFrac / 100) % 10;
+    advertData[16] = '0' + (strFrac / 10) % 10;
+    advertData[17] = '0' + (strFrac % 10);
+
+    {
+        uint8_t initialAdvertEnable = TRUE;
+        uint16_t advertOffTime = 0;
+        uint8_t enableUpdateRequest = DEFAULT_ENABLE_UPDATE_REQUEST;
+        uint16_t desiredMinInterval = DEFAULT_DESIRED_MIN_CONN_INTERVAL;
+        uint16_t desiredMaxInterval = DEFAULT_DESIRED_MAX_CONN_INTERVAL;
+        uint16_t desiredSlaveLatency = DEFAULT_DESIRED_SLAVE_LATENCY;
+        uint16_t desiredConnTimeout = DEFAULT_DESIRED_CONN_TIMEOUT;
+
+        GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &initialAdvertEnable);
+        
+        uint8_t advType = GAP_ADTYPE_ADV_SCAN_IND;
+        GAPRole_SetParameter(GAPROLE_ADV_EVENT_TYPE, sizeof(uint8_t), &advType);
+        
+        GAPRole_SetParameter(GAPROLE_ADVERT_OFF_TIME, sizeof(uint16_t), &advertOffTime);
+        GAPRole_SetParameter(GAPROLE_SCAN_RSP_DATA, sizeof(scanRspData), scanRspData);
+        GAPRole_SetParameter(GAPROLE_ADVERT_DATA, sizeof(advertData), advertData);
+        GAPRole_SetParameter(GAPROLE_PARAM_UPDATE_ENABLE, sizeof(uint8_t), &enableUpdateRequest);
+        GAPRole_SetParameter(GAPROLE_MIN_CONN_INTERVAL, sizeof(uint16_t), &desiredMinInterval);
+        GAPRole_SetParameter(GAPROLE_MAX_CONN_INTERVAL, sizeof(uint16_t), &desiredMaxInterval);
+        GAPRole_SetParameter(GAPROLE_SLAVE_LATENCY, sizeof(uint16_t), &desiredSlaveLatency);
+        GAPRole_SetParameter(GAPROLE_TIMEOUT_MULTIPLIER, sizeof(uint16_t), &desiredConnTimeout);
+    }
+
+    GGS_SetParameter(GGS_DEVICE_NAME_ATT, GAP_DEVICE_NAME_LEN, attDeviceName);
+    
+    {
+        uint16_t advInt = DEFAULT_ADVERTISING_INTERVAL;
+        GAP_SetParamValue(TGAP_LIM_DISC_ADV_INT_MIN, advInt);
+        GAP_SetParamValue(TGAP_LIM_DISC_ADV_INT_MAX, advInt);
+        GAP_SetParamValue(TGAP_GEN_DISC_ADV_INT_MIN, advInt);
+        GAP_SetParamValue(TGAP_GEN_DISC_ADV_INT_MAX, advInt);
+    }
+
+    {
+        uint32_t passkey = 0;
+        uint8_t pairMode = GAPBOND_PAIRING_MODE_WAIT_FOR_REQ;
+        uint8_t mitm = TRUE;
+        uint8_t ioCap = GAPBOND_IO_CAP_DISPLAY_ONLY;
+        uint8_t bonding = TRUE;
+        
+        GAPBondMgr_SetParameter(GAPBOND_DEFAULT_PASSCODE, sizeof(uint32_t), &passkey);
+        GAPBondMgr_SetParameter(GAPBOND_PAIRING_MODE, sizeof(uint8_t), &pairMode);
+        GAPBondMgr_SetParameter(GAPBOND_MITM_PROTECTION, sizeof(uint8_t), &mitm);
+        GAPBondMgr_SetParameter(GAPBOND_IO_CAPABILITIES, sizeof(uint8_t), &ioCap);
+        GAPBondMgr_SetParameter(GAPBOND_BONDING_ENABLED, sizeof(uint8_t), &bonding);
+    }
+
+    GGS_AddService(GATT_ALL_SERVICES);
+    GATTServApp_AddService(GATT_ALL_SERVICES);
+    DevInfo_AddService();
+
+#ifndef FEATURE_OAD_ONCHIP
+    SimpleProfile_AddService(GATT_ALL_SERVICES);
+    SimpleProfile_RegisterAppCBs(&SimpleBLEPeripheral_simpleProfileCBs);
+#endif 
+
+    VOID GAPRole_StartDevice(&SimpleBLEPeripheral_gapRoleCBs);
+    VOID GAPBondMgr_Register(&simpleBLEPeripheral_BondMgrCBs);
+    GAP_RegisterForMsgs(selfEntity);
+    GATT_RegisterForMsgs(selfEntity);
+    HCI_LE_ReadMaxDataLenCmd();
+
+    Util_startClock(&advOffClock);
+}
+
+static void SimpleBLEPeripheral_taskFxn(UArg a0, UArg a1)
+{
+    SimpleBLEPeripheral_init();
+    
+    for (;;)
+    {
+        ICall_Errno errno = ICall_wait(ICALL_TIMEOUT_FOREVER);
+        
+        if (errno == ICALL_ERRNO_SUCCESS)
+        {
+            ICall_EntityID dest;
+            ICall_ServiceEnum src;
+            ICall_HciExtEvt *pMsg = NULL;
+
+            if (ICall_fetchServiceMsg(&src, &dest, (void **)&pMsg) == ICALL_ERRNO_SUCCESS)
+            {
+                uint8 safeToDealloc = TRUE;
+                
+                if ((src == ICALL_SERVICE_CLASS_BLE) && (dest == selfEntity))
+                {
+                    ICall_Stack_Event *pEvt = (ICall_Stack_Event *)pMsg;
+                    if (pEvt->signature == 0xffff) 
+                    {
+                        if (pEvt->event_flag & SBP_CONN_EVT_END_EVT) 
+                        { 
+                            SimpleBLEPeripheral_sendAttRsp(); 
+                        }
+                    } 
+                    else 
+                    {
+                        safeToDealloc = SimpleBLEPeripheral_processStackMsg((ICall_Hdr *)pMsg);
+                    }
+                }
+                
+                if (pMsg && safeToDealloc) 
+                { 
+                    ICall_freeMsg(pMsg); 
+                }
+            }
+
+            while (!Queue_empty(appMsgQueue))
+            {
+                sbpEvt_t *pMsg = (sbpEvt_t *)Util_dequeueMsg(appMsgQueue);
+                if (pMsg) 
+                {
+                    SimpleBLEPeripheral_processAppMsg(pMsg);
+                    ICall_free(pMsg);
+                }
+            }
+        }
+
+        if (events & SBP_ADV_OFF_EVT)
+        {
+            events &= ~SBP_ADV_OFF_EVT;
+            isBLEAdvertising = false;
+            
+            uint8_t advertEnable = FALSE;
+            GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &advertEnable);
+            
+            Util_startClock(&advOnClock);
+        }
+
+        if (events & SBP_ADV_ON_EVT)
+        {
+            events &= ~SBP_ADV_ON_EVT;
+            isBLEAdvertising = true;
+            
+            uint8_t advertEnable = TRUE;
+            GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &advertEnable);
+            
+            Util_startClock(&advOffClock);
+        }
+
+        if (events & SBP_PERIODIC_EVT)
+        {
+            events &= ~SBP_PERIODIC_EVT;
+            SimpleBLEPeripheral_performPeriodicTask();
+        }
+    }
+}
+
+static uint8_t SimpleBLEPeripheral_processStackMsg(ICall_Hdr *pMsg)
+{
+    uint8_t safeToDealloc = TRUE;
+    
+    switch (pMsg->event)
+    {
+        case GATT_MSG_EVENT:
+            safeToDealloc = SimpleBLEPeripheral_processGATTMsg((gattMsgEvent_t *)pMsg);
+            break;
+            
+        case HCI_GAP_EVENT_EVENT:
+        {
+            switch(pMsg->status) 
+            {
+                case HCI_COMMAND_COMPLETE_EVENT_CODE: 
+                    break;
+                case HCI_BLE_HARDWARE_ERROR_EVENT_CODE: 
+                    AssertHandler(HAL_ASSERT_CAUSE_HARDWARE_ERROR,0); 
+                    break;
+                default: 
+                    break;
+            }
+        }
+        break;
+        
+        default: 
+            break;
+    }
+    return (safeToDealloc);
+}
+
+static uint8_t SimpleBLEPeripheral_processGATTMsg(gattMsgEvent_t *pMsg)
+{
+    if (pMsg->hdr.status == blePending) 
+    {
+        if (HCI_EXT_ConnEventNoticeCmd(pMsg->connHandle, selfEntity, SBP_CONN_EVT_END_EVT) == SUCCESS) 
+        {
+            SimpleBLEPeripheral_freeAttRsp(FAILURE);
+            pAttRsp = pMsg;
+            return (FALSE);
+        }
+    }
+    GATT_bm_free(&pMsg->msg, pMsg->method);
+    return (TRUE);
+}
+
+static void SimpleBLEPeripheral_sendAttRsp(void)
+{
+    if (pAttRsp != NULL) 
+    {
+        uint8_t status;
+        rspTxRetry++;
+        status = GATT_SendRsp(pAttRsp->connHandle, pAttRsp->method, &(pAttRsp->msg));
+        
+        if ((status != blePending) && (status != MSG_BUFFER_NOT_AVAIL)) 
+        {
+            HCI_EXT_ConnEventNoticeCmd(pAttRsp->connHandle, selfEntity, 0);
+            SimpleBLEPeripheral_freeAttRsp(status);
+        }
+    }
+}
+
+static void SimpleBLEPeripheral_freeAttRsp(uint8_t status)
+{
+    if (pAttRsp != NULL) 
+    {
+        if (status != SUCCESS) 
+        { 
+            GATT_bm_free(&pAttRsp->msg, pAttRsp->method); 
+        }
+        
+        ICall_freeMsg(pAttRsp);
+        pAttRsp = NULL;
+        rspTxRetry = 0;
+    }
+}
+
+static void SimpleBLEPeripheral_processAppMsg(sbpEvt_t *pMsg)
+{
+    switch (pMsg->hdr.event) 
+    {
+        case SBP_STATE_CHANGE_EVT: 
+            SimpleBLEPeripheral_processStateChangeEvt((gaprole_States_t)pMsg->hdr.state); 
+            break;
+        case SBP_CHAR_CHANGE_EVT: 
+            SimpleBLEPeripheral_processCharValueChangeEvt(pMsg->hdr.state); 
+            break;
+        default: 
+            break;
+    }
+}
+
+static void SimpleBLEPeripheral_stateChangeCB(gaprole_States_t newState) 
+{ 
+    SimpleBLEPeripheral_enqueueMsg(SBP_STATE_CHANGE_EVT, newState); 
+}
+
+static void SimpleBLEPeripheral_processStateChangeEvt(gaprole_States_t newState)
+{
+    gapProfileState = newState;
+
+    switch ( newState ) 
+    {
+        case GAPROLE_STARTED:
+        {
+            uint8_t ownAddress[B_ADDR_LEN]; 
+            uint8_t systemId[DEVINFO_SYSTEM_ID_LEN];
+            
+            GAPRole_GetParameter(GAPROLE_BD_ADDR, ownAddress);
+            systemId[0] = ownAddress[0]; 
+            systemId[1] = ownAddress[1]; 
+            systemId[2] = ownAddress[2];
+            systemId[4] = 0x00; 
+            systemId[3] = 0x00; 
+            systemId[7] = ownAddress[5];
+            systemId[6] = ownAddress[4]; 
+            systemId[5] = ownAddress[3];
+            
+            DevInfo_SetParameter(DEVINFO_SYSTEM_ID, DEVINFO_SYSTEM_ID_LEN, systemId);
+        }
+        break;
+        
+        case GAPROLE_ADVERTISING: 
+            break;
+            
+        case GAPROLE_CONNECTED: 
+            break;
+            
+        case GAPROLE_CONNECTED_ADV: 
+            break;
+            
+        case GAPROLE_WAITING:
+        {
+            uint8_t advertReEnable = isBLEAdvertising ? TRUE : FALSE;
+            SimpleBLEPeripheral_freeAttRsp(bleNotConnected);
+            GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &advertReEnable);
+        }
+        break;
+        
+        case GAPROLE_WAITING_AFTER_TIMEOUT: 
+            SimpleBLEPeripheral_freeAttRsp(bleNotConnected); 
+            break;
+        
+        case GAPROLE_ERROR: 
+            break;
+            
+        default: 
+            break;
+    }
+}
+
+#ifndef FEATURE_OAD_ONCHIP
+static void SimpleBLEPeripheral_charValueChangeCB(uint8_t paramID) 
+{ 
+    SimpleBLEPeripheral_enqueueMsg(SBP_CHAR_CHANGE_EVT, paramID); 
+}
+#endif 
+
+static void SimpleBLEPeripheral_processCharValueChangeEvt(uint8_t paramID)
+{
+#ifndef FEATURE_OAD_ONCHIP
+    // No characteristic writing required.
+#endif 
+}
+
+static void SimpleBLEPeripheral_performPeriodicTask(void)
+{
+    if (deploymentHoldCounter > 0)
+    {
+        deploymentHoldCounter--;
+        return; 
+    }
+
+    I2C_Params i2cParams;
+    I2C_Params_init(&i2cParams);
+    i2cParams.bitRate = I2C_400kHz;
+    i2c = I2C_open(Board_I2C, &i2cParams);
+
+    uint8_t txBuf[1] = {0x00};
+    uint8_t rxBuf[2] = {0, 0}; 
+    
+    I2C_Transaction i2cTransaction;
+    memset(&i2cTransaction, 0, sizeof(I2C_Transaction));
+    i2cTransaction.slaveAddress = 0x48;
+    i2cTransaction.writeBuf     = txBuf; 
+    i2cTransaction.writeCount   = 1;
+    i2cTransaction.readBuf      = rxBuf; 
+    i2cTransaction.readCount    = 2;
+
+    float currentTemp;
+
+    if (i2c != NULL && I2C_transfer(i2c, &i2cTransaction))
+    {
+        I2C_close(i2c); 
+        int16_t rawTemp = (rxBuf[0] << 4) | (rxBuf[1] >> 4);
+        
+        if (rawTemp & 0x0800) 
+        {
+            rawTemp |= 0xF000;
+        }
+        
+        currentTemp = rawTemp * 0.0625f;
+        lastGoodTemp = currentTemp; 
+    }
+    else
+    {
+        if(i2c != NULL) 
+        {
+            I2C_close(i2c);
+        }
+        currentTemp = lastGoodTemp; 
+    }
+
+    tempAccumulator += currentTemp;
+    sampleCount++;
+    
+    osal_snv_write(SNV_ID_SAMPLE_COUNT, sizeof(uint8_t), &sampleCount);
+    osal_snv_write(SNV_ID_TEMP_ACCUM, sizeof(float), &tempAccumulator);
+    
+    if (sampleCount >= 6) 
+    {
+        hoursUptime++;
+        float averageTemp = tempAccumulator / 6.0f;
+        float previousMaturity = cumulativeMaturity;
+        float newMaturitySlice = 0.0f;
+
+        if (averageTemp > DATUM_TEMPERATURE) 
+        {
+            float timeStepHours = 1.0f; 
+            newMaturitySlice = (averageTemp - DATUM_TEMPERATURE) * timeStepHours;
+            cumulativeMaturity = previousMaturity + newMaturitySlice;
+        }
+
+        if (cumulativeMaturity > 0.0f) 
+        {
+            compressiveStrength = STRENGTH_CONST_A + STRENGTH_CONST_B * logf(cumulativeMaturity);
+            if (compressiveStrength < 0.0f) compressiveStrength = 0.0f; 
+        }
+        else 
+        {
+            compressiveStrength = 0.0f;
+        }
+
+        osal_snv_write(SNV_ID_UPTIME, sizeof(uint32_t), &hoursUptime);
+        osal_snv_write(SNV_ID_MATURITY, sizeof(float), &cumulativeMaturity);
+        osal_snv_write(SNV_ID_STRENGTH, sizeof(float), &compressiveStrength);
+
+        int strWhole = (int)compressiveStrength;
+        int strFrac  = (int)((compressiveStrength - strWhole) * 10000); 
+        if (strFrac < 0) strFrac = -strFrac;
+        if (strWhole < 0) strWhole = 0; 
+
+        advertData[7]  = '0' + (strWhole / 100000) % 10;
+        advertData[8]  = '0' + (strWhole / 10000) % 10;
+        advertData[9]  = '0' + (strWhole / 1000) % 10;
+        advertData[10] = '0' + (strWhole / 100) % 10;
+        advertData[11] = '0' + (strWhole / 10) % 10;
+        advertData[12] = '0' + (strWhole % 10);
+        
+        advertData[14] = '0' + (strFrac / 1000) % 10;  
+        advertData[15] = '0' + (strFrac / 100) % 10;
+        advertData[16] = '0' + (strFrac / 10) % 10;    
+        advertData[17] = '0' + (strFrac % 10);
+        
+        if (gapProfileState != GAPROLE_CONNECTED)
+        {
+            if (isBLEAdvertising) 
+            {
+                uint8_t advertEnable = FALSE;
+                GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &advertEnable); 
+                GAPRole_SetParameter(GAPROLE_ADVERT_DATA, sizeof(advertData), advertData);
+                
+                advertEnable = TRUE;
+                GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8_t), &advertEnable);
+            } 
+            else 
+            {
+                GAPRole_SetParameter(GAPROLE_ADVERT_DATA, sizeof(advertData), advertData);
+            }
+        }
+
+        tempAccumulator = 0.0f;
+        sampleCount = 0;
+
+        osal_snv_write(SNV_ID_SAMPLE_COUNT, sizeof(uint8_t), &sampleCount);
+        osal_snv_write(SNV_ID_TEMP_ACCUM, sizeof(float), &tempAccumulator);
+    }
+}
+
+static void SimpleBLEPeripheral_clockHandler(UArg arg)
+{
+    events |= arg;
+    Semaphore_post(sem);
+}
+
+static void SimpleBLEPeripheral_enqueueMsg(uint8_t event, uint8_t state)
+{
+    sbpEvt_t *pMsg;
+    
+    if ((pMsg = ICall_malloc(sizeof(sbpEvt_t))))
+    {
+        pMsg->hdr.event = event;
+        pMsg->hdr.state = state;
+        Util_enqueueMsg(appMsgQueue, sem, (uint8*)pMsg);
+    }
+}

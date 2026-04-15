@@ -1,0 +1,1 @@
+this folder consists of the data acquired from concrete strength testing, matching with lab tested experimental values (from cylinder testing of M30 Grade concrete) and the method used to get our final formula
