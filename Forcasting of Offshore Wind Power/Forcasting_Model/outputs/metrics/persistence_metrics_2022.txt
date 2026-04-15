@@ -1,0 +1,13 @@
+PERSISTENCE MODEL RESULTS
+==================================================
+
+Full Year 2022 (1-hour horizon):
+  MAE: 0.0231
+  RMSE: 0.0336
+  MAPE: 8.72%
+
+Seasonal Performance (1-hour horizon):
+  Q1 2022 (Winter): MAE=0.0223, RMSE=0.0325
+  Q2 2022 (Spring): MAE=0.0234, RMSE=0.0345
+  Q3 2022 (Summer): MAE=0.0223, RMSE=0.0317
+  Q4 2022 (Fall): MAE=0.0246, RMSE=0.0353

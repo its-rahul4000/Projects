@@ -1,0 +1,15 @@
+DATA STATISTICS
+==================================================
+Original records: 201,600
+Final records: 113,952
+Time range: 2010-01-01 00:00:00 to 2022-12-31 23:00:00
+Years covered: 13
+Mean capacity factor: 0.4160
+Median capacity factor: 0.3791
+Std deviation: 0.2644
+Min value: 0.0013
+Max value: 0.9000
+25th percentile: 0.1814
+75th percentile: 0.6391
+Missing values handled: 0
+Outliers clipped: 0
