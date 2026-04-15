@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shopping Cart - Rohit Hardware</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Header - Same as homepage -->
+    <header class="header">
+        <div class="container">
+            <nav class="navbar">
+                <div class="nav-brand">
+                    <i class="fas fa-tools"></i>
+                    <span>Rohit Hardware</span>
+                </div>
+
+                <!-- Desktop Navigation -->
+                <ul class="nav-links">
+                    <li><a href="index.html">Home</a></li>
+                    <li class="dropdown">
+                        <a href="#">Categories <i class="fas fa-chevron-down"></i></a>
+                        <div class="dropdown-menu">
+                            <a href="#" data-category="Tools">Tools</a>
+                            <a href="#" data-category="Electrical">Electrical</a>
+                            <a href="#" data-category="Plumbing">Plumbing</a>
+                            <a href="#" data-category="Paint">Paint</a>
+                            <a href="#" data-category="Hardware">Hardware</a>
+                            <a href="#" data-category="Safety">Safety</a>
+                            <a href="#" data-category="Garden">Garden</a>
+                            <a href="#" data-category="Building Materials">Building Materials</a>
+                        </div>
+                    </li>
+                    <li><a href="index.html#featured">Featured</a></li>
+                    <li><a href="index.html#sale">On Sale</a></li>
+                    <li><a href="index.html#about">About</a></li>
+                    <li><a href="index.html#contact">Contact</a></li>
+                </ul>
+
+                <div class="nav-actions">
+                    <div class="search-box">
+                        <input type="text" id="searchInput" placeholder="Search tools, equipment...">
+                        <button id="searchBtn"><i class="fas fa-search"></i></button>
+                    </div>
+                    <div class="cart-icon">
+                        <a href="cart.html" id="cartLink">
+                            <i class="fas fa-shopping-cart"></i>
+                            <span class="cart-count">0</span>
+                        </a>
+                    </div>
+                    <!-- Mobile Menu Button -->
+                    <div class="mobile-menu-btn">
+                        <i class="fas fa-bars"></i>
+                    </div>
+                </div>
+
+                <div class="auth-buttons">
+                    <button id="loginBtn" class="btn-auth">Login</button>
+                    <button id="registerBtn" class="btn-auth">Register</button>
+                    <button id="logoutBtn" class="btn-auth" style="display: none;">Logout</button>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Mobile Sidebar Menu - Without search box -->
+    <div class="mobile-sidebar">
+        <div class="sidebar-header">
+            <div class="nav-brand">
+                <i class="fas fa-tools"></i>
+                <span>Rohit Hardware</span>
+            </div>
+            <div class="sidebar-close">
+                <i class="fas fa-times"></i>
+            </div>
+        </div>
+        
+        <div class="sidebar-content">
+            <!-- Navigation Links -->
+            <ul class="sidebar-links">
+                <li><a href="index.html">Home</a></li>
+                <li class="sidebar-dropdown">
+                    <a href="#" class="dropdown-toggle">
+                        Categories <i class="fas fa-chevron-down"></i>
+                    </a>
+                    <ul class="sidebar-dropdown-menu">
+                        <li><a href="#" data-category="Tools">Tools</a></li>
+                        <li><a href="#" data-category="Electrical">Electrical</a></li>
+                        <li><a href="#" data-category="Plumbing">Plumbing</a></li>
+                        <li><a href="#" data-category="Paint">Paint</a></li>
+                        <li><a href="#" data-category="Hardware">Hardware</a></li>
+                        <li><a href="#" data-category="Safety">Safety</a></li>
+                        <li><a href="#" data-category="Garden">Garden</a></li>
+                        <li><a href="#" data-category="Building Materials">Building Materials</a></li>
+                    </ul>
+                </li>
+                <li><a href="index.html#featured">Featured</a></li>
+                <li><a href="index.html#sale">On Sale</a></li>
+                <li><a href="index.html#about">About</a></li>
+                <li><a href="index.html#contact">Contact</a></li>
+            </ul>
+
+            <!-- Auth Buttons in Mobile Menu -->
+            <div class="sidebar-auth">
+                <button id="mobileLoginBtn" class="btn-auth">Login</button>
+                <button id="mobileRegisterBtn" class="btn-auth">Register</button>
+                <button id="mobileLogoutBtn" class="btn-auth" style="display: none;">Logout</button>
+            </div>
+
+            <!-- Cart in Mobile Menu -->
+            <div class="sidebar-cart">
+                <a href="cart.html" class="cart-link">
+                    <i class="fas fa-shopping-cart"></i>
+                    Shopping Cart (<span class="mobile-cart-count">0</span>)
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overlay for Mobile Menu -->
+    <div class="sidebar-overlay"></div>
+
+    <!-- Cart Section -->
+    <section class="cart-section">
+        <div class="container">
+            <div class="cart-header">
+                <h1>Shopping Cart</h1>
+                <a href="index.html" class="continue-shopping">
+                    <i class="fas fa-arrow-left"></i>
+                    Continue Shopping
+                </a>
+            </div>
+
+            <div class="cart-content">
+                <div class="cart-items" id="cartItems">
+                    <!-- Cart items will be loaded here -->
+                    <div class="empty-cart" id="emptyCart">
+                        <i class="fas fa-shopping-cart"></i>
+                        <h3>Your cart is empty</h3>
+                        <p>Add some tools and equipment to get started!</p>
+                        <a href="index.html" class="btn btn-primary">Start Shopping</a>
+                    </div>
+                </div>
+
+                <div class="cart-summary">
+                    <div class="summary-card">
+                        <h3>Order Summary</h3>
+                        <div class="summary-details">
+                            <div class="summary-row">
+                                <span>Subtotal</span>
+                                <span id="subtotal">₹0.00</span>
+                            </div>
+                            <div class="summary-row">
+                                <span>Shipping</span>
+                                <span id="shipping">₹0.00</span>
+                            </div>
+                            <div class="summary-row">
+                                <span>Tax</span>
+                                <span id="tax">₹0.00</span>
+                            </div>
+                            <div class="summary-row total">
+                                <span>Total</span>
+                                <span id="total">₹0.00</span>
+                            </div>
+                        </div>
+                        <div class="shipping-note" id="shippingNote">
+                            <i class="fas fa-shipping-fast"></i>
+                            <span>Add ₹<span id="freeShippingRemaining">500.00</span> for free shipping!</span>
+                        </div>
+                        <button class="btn btn-primary btn-checkout" id="checkoutBtn" disabled>
+                            Proceed to Checkout
+                        </button>
+                        <div class="payment-methods">
+                            <i class="fab fa-cc-visa"></i>
+                            <i class="fab fa-cc-mastercard"></i>
+                            <i class="fab fa-cc-paypal"></i>
+                            <i class="fab fa-cc-amex"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recently Viewed -->
+            <div class="recently-viewed">
+                <h3>You Might Also Need</h3>
+                <div class="products-grid" id="suggestedProducts">
+                    <!-- Suggested products will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Checkout Modal -->
+    <div id="checkoutModal" class="modal">
+        <div class="modal-content checkout-modal">
+            <span class="close">&times;</span>
+            <h2>Checkout</h2>
+            
+            <div class="checkout-steps">
+                <div class="step active" data-step="1">Shipping</div>
+                <div class="step" data-step="2">Payment</div>
+                <div class="step" data-step="3">Review</div>
+            </div>
+
+            <form id="checkoutForm">
+                <!-- Step 1: Shipping -->
+                <div class="checkout-step active" data-step="1">
+                    <h3>Shipping Information</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Full Name</label>
+                            <input type="text" name="fullName" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Street Address</label>
+                            <input type="text" name="street" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>City</label>
+                            <input type="text" name="city" required>
+                        </div>
+                        <div class="form-group">
+                            <label>State</label>
+                            <input type="text" name="state" required>
+                        </div>
+                        <div class="form-group">
+                            <label>ZIP Code</label>
+                            <input type="text" name="zipCode" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Country</label>
+                            <input type="text" name="country" value="India" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Phone Number</label>
+                            <input type="tel" name="phone" required>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Payment -->
+                <div class="checkout-step" data-step="2">
+                    <h3>Payment Method</h3>
+                    <div class="payment-options">
+                        <label class="payment-option">
+                            <input type="radio" name="paymentMethod" value="credit_card" checked>
+                            <i class="fab fa-cc-visa"></i>
+                            Credit Card
+                        </label>
+                        <label class="payment-option">
+                            <input type="radio" name="paymentMethod" value="debit_card">
+                            <i class="fab fa-cc-mastercard"></i>
+                            Debit Card
+                        </label>
+                        <label class="payment-option">
+                            <input type="radio" name="paymentMethod" value="paypal">
+                            <i class="fab fa-cc-paypal"></i>
+                            PayPal
+                        </label>
+                        <label class="payment-option">
+                            <input type="radio" name="paymentMethod" value="upi">
+                            <i class="fas fa-mobile-alt"></i>
+                            UPI
+                        </label>
+                        <label class="payment-option">
+                            <input type="radio" name="paymentMethod" value="cash_on_delivery">
+                            <i class="fas fa-money-bill-wave"></i>
+                            Cash on Delivery
+                        </label>
+                    </div>
+
+                    <div class="card-details" id="cardDetails">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Card Number</label>
+                                <input type="text" placeholder="1234 5678 9012 3456">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Expiry Date</label>
+                                <input type="text" placeholder="MM/YY">
+                            </div>
+                            <div class="form-group">
+                                <label>CVV</label>
+                                <input type="text" placeholder="123">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Cardholder Name</label>
+                                <input type="text" placeholder="John Doe">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Review -->
+                <div class="checkout-step" data-step="3">
+                    <h3>Order Review</h3>
+                    <div class="order-review">
+                        <div class="review-items" id="reviewItems">
+                            <!-- Order items will be loaded here -->
+                        </div>
+                        <div class="review-totals">
+                            <div class="summary-row">
+                                <span>Subtotal</span>
+                                <span id="reviewSubtotal">₹0.00</span>
+                            </div>
+                            <div class="summary-row">
+                                <span>Shipping</span>
+                                <span id="reviewShipping">₹0.00</span>
+                            </div>
+                            <div class="summary-row">
+                                <span>Tax</span>
+                                <span id="reviewTax">₹0.00</span>
+                            </div>
+                            <div class="summary-row total">
+                                <span>Total</span>
+                                <span id="reviewTotal">₹0.00</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="shipping-address">
+                        <h4>Shipping to:</h4>
+                        <p id="reviewShippingAddress"></p>
+                    </div>
+                </div>
+
+                <div class="checkout-actions">
+                    <button type="button" class="btn btn-secondary" id="prevStepBtn" style="display: none;">Previous</button>
+                    <button type="button" class="btn btn-primary" id="nextStepBtn">Next</button>
+                    <button type="submit" class="btn btn-success" id="placeOrderBtn" style="display: none;">Place Order</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Order Success Modal -->
+    <div id="orderSuccessModal" class="modal">
+        <div class="modal-content success-modal">
+            <div class="success-icon">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <h2>Order Placed Successfully!</h2>
+            <p>Thank you for your purchase. Your order has been confirmed.</p>
+            <div class="order-details">
+                <p><strong>Order Number:</strong> <span id="successOrderNumber"></span></p>
+                <p><strong>Total Amount:</strong> <span id="successOrderTotal"></span></p>
+            </div>
+            <div class="success-actions">
+                <button class="btn btn-primary" onclick="window.location.href='index.html'">Continue Shopping</button>
+                <button class="btn btn-secondary" id="viewOrderBtn">View Order Details</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auth Modal - Same as homepage -->
+    <div id="authModal" class="modal">
+        <div class="modal-content auth-modal">
+            <span class="close">&times;</span>
+            <div class="auth-header">
+                <h2>Welcome to Rohit Hardware</h2>
+                <p>Sign in to your account or create a new one</p>
+            </div>
+            
+            <div class="auth-tabs">
+                <button class="tab-btn active" data-tab="login">
+                    <i class="fas fa-sign-in-alt"></i>
+                    Login
+                </button>
+                <button class="tab-btn" data-tab="register">
+                    <i class="fas fa-user-plus"></i>
+                    Register
+                </button>
+            </div>
+            
+            <div class="tab-content">
+                <!-- Login Form -->
+                <div id="login" class="tab-pane active">
+                    <form id="loginForm" class="auth-form">
+                        <div class="form-group">
+                            <label for="loginEmail">
+                                <i class="fas fa-envelope"></i>
+                                Email Address
+                            </label>
+                            <input type="email" id="loginEmail" placeholder="Enter your email" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="loginPassword">
+                                <i class="fas fa-lock"></i>
+                                Password
+                            </label>
+                            <input type="password" id="loginPassword" placeholder="Enter your password" required>
+                            <div class="password-toggle">
+                                <i class="fas fa-eye" id="toggleLoginPassword"></i>
+                            </div>
+                        </div>
+                        
+                        <div class="form-options">
+                            <label class="checkbox">
+                                <input type="checkbox" id="rememberMe">
+                                <span class="checkmark"></span>
+                                Remember me
+                            </label>
+                            <a href="#" class="forgot-password">Forgot password?</a>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary btn-auth-submit">
+                            <i class="fas fa-sign-in-alt"></i>
+                            Sign In
+                        </button>
+                    </form>
+                </div>
+                
+                <!-- Register Form -->
+                <div id="register" class="tab-pane">
+                    <form id="registerForm" class="auth-form">
+                        <div class="form-group">
+                            <label for="registerUsername">
+                                <i class="fas fa-user"></i>
+                                Username
+                            </label>
+                            <input type="text" id="registerUsername" placeholder="Choose a username" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="registerEmail">
+                                <i class="fas fa-envelope"></i>
+                                Email Address
+                            </label>
+                            <input type="email" id="registerEmail" placeholder="Enter your email" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="registerPassword">
+                                <i class="fas fa-lock"></i>
+                                Password
+                            </label>
+                            <input type="password" id="registerPassword" placeholder="Create a password" required>
+                            <div class="password-toggle">
+                                <i class="fas fa-eye" id="toggleRegisterPassword"></i>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="confirmPassword">
+                                <i class="fas fa-lock"></i>
+                                Confirm Password
+                            </label>
+                            <input type="password" id="confirmPassword" placeholder="Confirm your password" required>
+                            <div class="password-toggle">
+                                <i class="fas fa-eye" id="toggleConfirmPassword"></i>
+                            </div>
+                        </div>
+                        
+                        <div class="form-options">
+                            <label class="checkbox">
+                                <input type="checkbox" id="acceptTerms" required>
+                                <span class="checkmark"></span>
+                                I agree to the <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>
+                            </label>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary btn-auth-submit">
+                            <i class="fas fa-user-plus"></i>
+                            Create Account
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/products.js"></script>
+    <script src="js/cart.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
