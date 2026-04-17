@@ -23,6 +23,7 @@ The project is organized into the following directories for clear separation of 
 ├── reports/            # Project reports, presentations, and documentation
 ├── src/
 │   └── CC2650/         # Firmware source code for CC2650 (BLE + sensing + flash)
+│   └──Some others Testing Code
 ├── bom.xls             # Bill of Materials (components, cost, and sourcing details)
 ```
 
