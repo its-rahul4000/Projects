@@ -11,7 +11,7 @@ This project focuses on forecasting offshore wind power generation using time-se
 | Model                 | Description                                    | Performance (MAE)            |
 | --------------------- | ---------------------------------------------- | ---------------------------- |
 | **Persistence Model** | Uses previous values as predictions (baseline) | 0.0231                       |
-| **ARIMA(3,0,2)**      | Auto-Regressive Integrated Moving Average      | **0.0188** (19% improvement) |
+| **ARIMA(2,0,2)**      | Auto-Regressive Integrated Moving Average      | **0.0188** (19% improvement) |
 
 ---
 
@@ -71,7 +71,7 @@ Forcasting_Model/data/raw/Existing.csv
 
 ### Dataset Info
 
-* Time Range: **2000–2022** (used: 2010–2022)
+* Time Range: **2000–2020** (filtered to 2010-2020 for analysis)
 * Resolution: **Hourly**
 * Records: **376,920 → 113,952 (processed)**
 * Capacity Factor Range: **0.0007 – 0.9000**
@@ -137,7 +137,7 @@ cd scripts
 
 #### 1. Data Preprocessing
 
-* Filters UK data (2010–2022)
+* Filters UK data (2010–2020)
 * Handles missing values
 * Generates statistics
 

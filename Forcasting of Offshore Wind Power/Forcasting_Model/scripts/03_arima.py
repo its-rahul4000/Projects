@@ -1,6 +1,6 @@
 """
 EN639 Project: Offshore Wind Power Forecasting
-Script 03: ARIMA - Enhanced with Model Selection and Diagnostics
+Script 03: ARIMA - Train: 2010-2020, Test: 2022
 """
 import pandas as pd
 import numpy as np
@@ -25,7 +25,6 @@ def find_best_arima(train_data, max_p=3, max_d=2, max_q=3):
     best_order = None
     results = []
     
-    # Generate parameter combinations
     p_values = range(0, max_p+1)
     d_values = range(0, max_d+1)
     q_values = range(0, max_q+1)
@@ -35,7 +34,7 @@ def find_best_arima(train_data, max_p=3, max_d=2, max_q=3):
     
     for p, d, q in product(p_values, d_values, q_values):
         if p == 0 and q == 0:
-            continue  # Skip trivial model
+            continue
             
         try:
             model = ARIMA(train_data, order=(p, d, q))
@@ -52,7 +51,6 @@ def find_best_arima(train_data, max_p=3, max_d=2, max_q=3):
         except:
             continue
     
-    # Sort by AIC
     results_df = pd.DataFrame(results).sort_values('AIC')
     
     print(f"\n[OK] Best model: ARIMA{best_order} with AIC={best_aic:.1f}")
@@ -60,17 +58,20 @@ def find_best_arima(train_data, max_p=3, max_d=2, max_q=3):
     return best_order, results_df
 
 def run_arima_model():
-    """Enhanced ARIMA model with diagnostics and multiple horizons"""
+    """ARIMA model with training 2010-2020 and testing 2022"""
     
     print("="*70)
     print("ENHANCED ARIMA MODELING")
+    print("="*70)
+    print("Training Period: 2010-2020")
+    print("Testing Period: 2022")
     print("="*70)
     
     file_path = '../data/processed/UK_OFF_hourly_2010_2022.csv'
     df = pd.read_csv(file_path, parse_dates=['time'], index_col='time')
     
-    # Use more training data for better model
-    train_data = df.loc['2015-01-01':'2021-12-31']['UK_OFF']
+    # Train: 2010-2020, Test: 2022
+    train_data = df.loc['2010-01-01':'2020-12-31']['UK_OFF']
     test_data = df.loc['2022-01-01':'2022-12-31']['UK_OFF']
     
     print(f"\nTraining period: {train_data.index[0]} to {train_data.index[-1]}")
@@ -78,17 +79,16 @@ def run_arima_model():
     print(f"Test period: {test_data.index[0]} to {test_data.index[-1]}")
     print(f"Test samples: {len(test_data):,} hours")
     
-    # Find best ARIMA parameters (using daily data for speed, then refit on hourly)
+    # Find best ARIMA parameters using daily data for speed
     print("\n[1/5] Finding optimal ARIMA parameters...")
     train_daily = train_data.resample('D').mean()
     best_order, param_results = find_best_arima(train_daily, max_p=5, max_d=2, max_q=5)
     
-    # Save parameter selection results
     os.makedirs('../outputs/metrics', exist_ok=True)
     param_results.to_csv('../outputs/metrics/arima_parameter_selection.csv', index=False)
     
     # Fit final model on hourly data
-    print(f"\n[2/5] Fitting ARIMA{best_order} on hourly data...")
+    print(f"\n[2/5] Fitting ARIMA{best_order} on hourly training data (2010-2020)...")
     print("  (This may take 1-2 minutes...)")
     
     model = ARIMA(train_data, order=best_order)
@@ -102,7 +102,6 @@ def run_arima_model():
     # Diagnostic checks
     print("\n[3/5] Performing diagnostic checks...")
     
-    # Ljung-Box test for residual autocorrelation
     residuals = fitted_model.resid
     lb_test = acorr_ljungbox(residuals, lags=[10, 20, 30], return_df=True)
     print(f"\nLjung-Box Test (H0: No autocorrelation):")
@@ -111,18 +110,17 @@ def run_arima_model():
         result = "[OK] Pass" if p_value > 0.05 else "[WARNING]"
         print(f"  Lag {lag}: p-value={p_value:.4f} ({result})")
     
-    # Check normality of residuals
     from scipy.stats import jarque_bera
     jb_stat, jb_pvalue = jarque_bera(residuals.dropna())
     print(f"\nJarque-Bera Normality Test: p-value={jb_pvalue:.4f}")
     
-    # Rolling forecast
-    print(f"\n[4/5] Generating rolling forecasts for {len(test_data)} hours...")
+    # Rolling forecast on test data
+    print(f"\n[4/5] Generating rolling forecasts for {len(test_data)} hours (2022)...")
     test_results = fitted_model.apply(test_data)
     forecast = test_results.fittedvalues[1:]
     actual = test_data[1:]
     
-    # Calculate comprehensive metrics
+    # Calculate metrics
     mae = mean_absolute_error(actual, forecast)
     rmse = np.sqrt(mean_squared_error(actual, forecast))
     mape = mean_absolute_percentage_error(actual, forecast) * 100
@@ -147,7 +145,7 @@ def run_arima_model():
             seasonal_metrics[season_name] = {'MAE': season_mae, 'RMSE': season_rmse}
     
     print("\n" + "="*60)
-    print("ARIMA MODEL RESULTS")
+    print("ARIMA MODEL RESULTS (Train 2010-2020, Test 2022)")
     print("="*60)
     print(f"Model: ARIMA{best_order}")
     print(f"\nOverall Performance (Full Year 2022):")
@@ -163,9 +161,9 @@ def run_arima_model():
     with open('../outputs/metrics/arima_metrics_full_2022.txt', 'w') as f:
         f.write(f"ARIMA MODEL RESULTS\n")
         f.write("="*50 + "\n\n")
-        f.write(f"Model: ARIMA{best_order}\n")
-        f.write(f"Training: 2015-2021 ({len(train_data):,} hours)\n")
-        f.write(f"Testing: 2022 ({len(test_data):,} hours)\n\n")
+        f.write(f"Training Period: 2010-2020 ({len(train_data):,} hours)\n")
+        f.write(f"Testing Period: 2022 ({len(test_data):,} hours)\n")
+        f.write(f"Model: ARIMA{best_order}\n\n")
         f.write(f"Overall Metrics:\n")
         f.write(f"  MAE: {mae:.4f}\n")
         f.write(f"  RMSE: {rmse:.4f}\n")
@@ -196,7 +194,7 @@ def run_arima_model():
     
     # Plot 2: Residuals
     ax2 = axes[0, 1]
-    residuals_plot = residuals[-1000:]  # Last 1000 residuals
+    residuals_plot = residuals[-1000:]
     ax2.plot(residuals_plot.index, residuals_plot.values, color='purple', alpha=0.7)
     ax2.axhline(y=0, color='red', linestyle='--', linewidth=2)
     ax2.set_title('Model Residuals (Last 1000 hours)')
@@ -212,14 +210,12 @@ def run_arima_model():
     
     # Plot 4: Actual vs Predicted scatter
     ax4 = axes[1, 1]
-    # Sample 5000 points for scatter plot
     sample_idx = np.random.choice(len(actual), min(5000, len(actual)), replace=False)
     ax4.scatter(actual.iloc[sample_idx], forecast.iloc[sample_idx], alpha=0.3, s=10)
     ax4.plot([0, 1], [0, 1], 'r--', linewidth=2, label='Perfect Prediction')
     ax4.set_xlabel('Actual Values')
     ax4.set_ylabel('Predicted Values')
     
-    # Calculate R-squared manually
     ss_res = np.sum((actual - forecast) ** 2)
     ss_tot = np.sum((actual - np.mean(actual)) ** 2)
     r2 = 1 - (ss_res / ss_tot)

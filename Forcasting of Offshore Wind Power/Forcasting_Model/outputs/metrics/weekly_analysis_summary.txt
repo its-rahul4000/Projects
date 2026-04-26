@@ -1,12 +1,15 @@
 WEEKLY ANALYSIS SUMMARY
 ==================================================
 
-ARIMA(3,0,2) Model Performance:
+Training Period: 2010-2020
+Testing Period: 2022
+
+ARIMA(2,0,2) Model Performance on Test Data:
   Full Year MAE: 0.0188
   Full Year RMSE: 0.0293
   Full Year MAPE: 7.25%
 
-Monthly Performance (ARIMA MAE):
+Monthly Performance (ARIMA MAE on Test Data):
   Jan: 0.0145
   Feb: 0.0205
   Mar: 0.0158

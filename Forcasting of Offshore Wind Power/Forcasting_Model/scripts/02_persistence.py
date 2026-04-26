@@ -1,21 +1,23 @@
 """
 EN639 Project: Offshore Wind Power Forecasting
-Script 02: The Persistence Model (Enhanced with Multi-Horizon Analysis)
+Script 02: The Persistence Model (Train: 2010-2020, Test: 2022)
 """
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error
 import os
-from datetime import datetime
 import warnings
 warnings.filterwarnings("ignore")
 
 def run_persistence_model():
-    """Enhanced persistence model with multiple time horizons"""
+    """Enhanced persistence model with train (2010-2020) and test (2022) split"""
     
     print("="*70)
     print("ENHANCED PERSISTENCE MODEL ANALYSIS")
+    print("="*70)
+    print("Training Period: 2010-2020")
+    print("Testing Period: 2022")
     print("="*70)
     
     os.makedirs('../outputs/figures', exist_ok=True)
@@ -27,7 +29,7 @@ def run_persistence_model():
     
     print(f"\nData loaded: {len(df)} hours from {df.index[0]} to {df.index[-1]}")
     
-    # Define test periods
+    # Define test periods for 2022 only
     test_periods = {
         'Full Year 2022': ('2022-01-01', '2022-12-31'),
         'Q1 2022 (Winter)': ('2022-01-01', '2022-03-31'),
@@ -51,14 +53,12 @@ def run_persistence_model():
         period_results = {}
         
         for horizon in horizons:
-            # Create forecast using specified horizon
             test_data[f'Forecast_{horizon}h'] = test_data['UK_OFF'].shift(horizon)
             test_data_clean = test_data.dropna()
             
             actual = test_data_clean['UK_OFF']
             predicted = test_data_clean[f'Forecast_{horizon}h']
             
-            # Calculate metrics
             mae = mean_absolute_error(actual, predicted)
             rmse = np.sqrt(mean_squared_error(actual, predicted))
             mape = mean_absolute_percentage_error(actual, predicted) * 100
@@ -80,7 +80,7 @@ def run_persistence_model():
     
     # Standard persistence (1-hour) for full year
     print("\n" + "="*70)
-    print("STANDARD PERSISTENCE MODEL (1-HOUR HORIZON)")
+    print("STANDARD PERSISTENCE MODEL (1-HOUR HORIZON) - TEST 2022")
     print("="*70)
     
     test_data_full = df.loc['2022-01-01':'2022-12-31'].copy()
@@ -103,22 +103,22 @@ def run_persistence_model():
     with open('../outputs/metrics/persistence_metrics_2022.txt', 'w') as f:
         f.write("PERSISTENCE MODEL RESULTS\n")
         f.write("="*50 + "\n\n")
+        f.write(f"Training Period: 2010-2020\n")
+        f.write(f"Testing Period: 2022\n\n")
         f.write(f"Full Year 2022 (1-hour horizon):\n")
         f.write(f"  MAE: {mae_full:.4f}\n")
         f.write(f"  RMSE: {rmse_full:.4f}\n")
         f.write(f"  MAPE: {mape_full:.2f}%\n\n")
         
-        f.write("Seasonal Performance (1-hour horizon):\n")
-        for period_name in ['Q1 2022 (Winter)', 'Q2 2022 (Spring)', 
-                           'Q3 2022 (Summer)', 'Q4 2022 (Fall)']:
-            if period_name in all_results:
-                res = all_results[period_name][1]
-                f.write(f"  {period_name}: MAE={res['MAE']:.4f}, RMSE={res['RMSE']:.4f}\n")
+        f.write("Horizon-wise Performance (Full Year 2022):\n")
+        for h in horizons:
+            res = all_results['Full Year 2022'][h]
+            f.write(f"  {h}h: MAE={res['MAE']:.4f}, RMSE={res['RMSE']:.4f}, MAPE={res['MAPE']:.2f}%\n")
     
     # Visualization
     fig, axes = plt.subplots(2, 2, figsize=(15, 10))
     
-    # Plot 1: 10-day sample (same as before)
+    # Plot 1: 10-day sample
     ax1 = axes[0, 0]
     plot_window = test_data_full.loc['2022-03-01':'2022-03-10']
     ax1.plot(plot_window.index, plot_window['UK_OFF'], label='Actual', color='blue', linewidth=2)
@@ -147,7 +147,7 @@ def run_persistence_model():
     horizons_list = list(all_results['Full Year 2022'].keys())
     rmse_values = [all_results['Full Year 2022'][h]['RMSE'] for h in horizons_list]
     ax3.plot(horizons_list, rmse_values, 'bo-', linewidth=2, markersize=8)
-    ax3.set_title('RMSE vs Prediction Horizon')
+    ax3.set_title('RMSE vs Prediction Horizon (Test 2022)')
     ax3.set_xlabel('Prediction Horizon (hours)')
     ax3.set_ylabel('RMSE')
     ax3.grid(True, alpha=0.3)
@@ -158,7 +158,7 @@ def run_persistence_model():
     seasonal_rmse = [all_results[f'Q{i+1} 2022 ({seasons[i]})'][1]['RMSE'] for i in range(4)]
     colors = ['lightblue', 'lightgreen', 'lightcoral', 'orange']
     ax4.bar(seasons, seasonal_rmse, color=colors, alpha=0.7)
-    ax4.set_title('Seasonal RMSE Performance')
+    ax4.set_title('Seasonal RMSE Performance (Test 2022)')
     ax4.set_ylabel('RMSE')
     ax4.grid(True, alpha=0.3)
     

@@ -1,6 +1,6 @@
 """
 EN639 Project: Offshore Wind Power Forecasting
-Script 01: Data Preprocessing and Interpolation (Enhanced - Pandas 2.0 Compatible)
+Script 01: Data Preprocessing and Interpolation
 """
 import pandas as pd
 import numpy as np
@@ -54,10 +54,9 @@ def prep_data():
     df_modern = df.loc['2010-01-01':'2022-12-31']
     print(f"[OK] Filtered to {len(df_modern):,} records (2010-2022)")
     
-    # Step 4: Handle missing data with multiple strategies
+    # Step 4: Handle missing data
     print("\n[4/6] Handling missing data...")
     
-    # Check for gaps in time series
     expected_hours = pd.date_range(start='2010-01-01', end='2022-12-31 23:00:00', freq='h')
     actual_hours = df_modern.index
     missing_hours = expected_hours.difference(actual_hours)
@@ -66,41 +65,33 @@ def prep_data():
         print(f"  Found {len(missing_hours)} missing hours in the time series")
         print(f"  First 5 missing timestamps: {missing_hours[:5].tolist()}")
     
-    # Resample to hourly and use forward fill (updated for pandas 2.0)
     df_resampled = df_modern.resample('h').asfreq()
     df_clean = df_resampled.copy()
     
-    # Forward fill for small gaps (updated method)
-    df_clean['UK_OFF'] = df_clean['UK_OFF'].ffill()  # Changed from fillna(method='ffill')
+    df_clean['UK_OFF'] = df_clean['UK_OFF'].ffill()
+    df_clean['UK_OFF'] = df_clean['UK_OFF'].bfill()
     
-    # Backward fill for any remaining gaps at the beginning (updated method)
-    df_clean['UK_OFF'] = df_clean['UK_OFF'].bfill()  # Changed from fillna(method='bfill')
-    
-    # Interpolate any remaining NaN values (should be none now)
     if df_clean['UK_OFF'].isna().any():
         df_clean['UK_OFF'] = df_clean['UK_OFF'].interpolate(method='linear')
     
     final_missing = df_clean['UK_OFF'].isna().sum()
     print(f"[OK] Missing data handled: {final_missing} remaining NaN values")
     
-    # Step 5: Additional quality checks
+    # Step 5: Quality checks
     print("\n[5/6] Performing quality checks...")
     
-    # Check for outliers (values > 1.0 or < 0)
     outliers = ((df_clean['UK_OFF'] > 1.0) | (df_clean['UK_OFF'] < 0)).sum()
     if outliers > 0:
         print(f"  [WARNING] Found {outliers} outliers (values outside [0,1])")
-        # Clip outliers to valid range
         df_clean['UK_OFF'] = df_clean['UK_OFF'].clip(0, 1)
         print(f"  [OK] Clipped outliers to valid range [0,1]")
     
-    # Check for duplicates
     duplicates = df_clean.index.duplicated().sum()
     if duplicates > 0:
         print(f"  [WARNING] Found {duplicates} duplicate timestamps, removing...")
         df_clean = df_clean[~df_clean.index.duplicated(keep='first')]
     
-    # Step 6: Save processed data and statistics
+    # Step 6: Save processed data
     print("\n[6/6] Saving processed data...")
     df_clean.to_csv(processed_file_path)
     print(f"[OK] Saved to: {processed_file_path}")
@@ -120,12 +111,9 @@ def prep_data():
         f.write(f"Max value: {df_clean['UK_OFF'].max():.4f}\n")
         f.write(f"25th percentile: {df_clean['UK_OFF'].quantile(0.25):.4f}\n")
         f.write(f"75th percentile: {df_clean['UK_OFF'].quantile(0.75):.4f}\n")
-        f.write(f"Missing values handled: {initial_missing}\n")
-        f.write(f"Outliers clipped: {outliers}\n")
     
     print(f"[OK] Statistics saved to: {stats_file_path}")
     
-    # Summary
     print("\n" + "="*70)
     print("DATA PREPROCESSING COMPLETE")
     print("="*70)
@@ -136,17 +124,15 @@ def prep_data():
     return df_clean
 
 def generate_data_report(df):
-    """Generate a comprehensive data quality report"""
+    """Generate comprehensive data quality report"""
     
     print("\n" + "="*70)
     print("DATA QUALITY REPORT")
     print("="*70)
     
-    # Basic statistics
     print("\nDescriptive Statistics:")
     print(df['UK_OFF'].describe())
     
-    # Yearly statistics
     print("\nYearly Averages:")
     df_copy = df.copy()
     df_copy['year'] = df_copy.index.year
@@ -154,7 +140,6 @@ def generate_data_report(df):
     for year, avg in yearly_avg.items():
         print(f"  {year}: {avg:.4f}")
     
-    # Monthly patterns
     print("\nMonthly Averages:")
     df_copy['month'] = df_copy.index.month
     monthly_avg = df_copy.groupby('month')['UK_OFF'].mean()
@@ -163,7 +148,6 @@ def generate_data_report(df):
     for month, avg in monthly_avg.items():
         print(f"  {month_names[month-1]}: {avg:.4f}")
     
-    # Hourly patterns
     print("\nHourly Averages (Peak hours):")
     df_copy['hour'] = df_copy.index.hour
     hourly_avg = df_copy.groupby('hour')['UK_OFF'].mean()
