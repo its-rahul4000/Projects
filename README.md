@@ -171,44 +171,10 @@ Each project includes **code, reports, simulations, and documentation**.
   - Market positioning  
 
 
-# 🛠 Technical Skills
-
-## Programming
-- C++  
-- Python  
-- Embedded C  
-- JavaScript  
-- VHDL  
-
-## Tools & Technologies
-- Node.js, Express.js  
-- MongoDB  
-- Streamlit  
-- Keil µVision  
-- ModelSim  
-- LTSpice  
-- GNU Radio  
-
-## Hardware
-- 8051 Microcontroller  
-- CC2650 / STM32  
-- FPGA (Xilinx)  
-- Sensors (TMP1075)  
-- Oscilloscope  
-
-# 🎯 Interests
-
-- Embedded Systems & IoT  
-- Artificial Intelligence & Machine Learning  
-- Computer Architecture  
-- Renewable Energy Systems  
-- Full-Stack Development  
-
 # 📌 About Me
 
-**Rahul Kumar**  
-B.Tech Electrical Engineering  
+**Rahul Kumar** 
++91-9693261348
+B.Tech, Electrical Engineering  
 Indian Institute of Technology Bombay  
-
-# 📬 Contact 
 - LinkedIn:https://www.linkedin.com/in/rahul-kumar-90186830a
