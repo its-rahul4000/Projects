@@ -173,7 +173,7 @@ Each project includes **code, reports, simulations, and documentation**.
 
 # 📌 About Me
 
-## Rahul Kumar
+- ## Rahul Kumar
 - +91-9693261348
 - B.Tech, Electrical Engineering  
 - Indian Institute of Technology Bombay  
