@@ -1,180 +1,165 @@
-# 📂 Rahul Kumar – Engineering & Research Projects
+# Cybersecurity Log Intelligence System
 
-This repository contains a collection of **academic, research, and personal projects** developed during my undergraduate studies in **Electrical Engineering at IIT Bombay**.
+## Project Directory
 
-The projects span across multiple domains:
+The parent project folder should be:
 
-- Embedded Systems  
-- Artificial Intelligence & Machine Learning  
-- Full-Stack Development  
-- Computer Architecture  
-- Analog Computing  
-- Energy Systems & Forecasting  
-- Data Analytics  
+```powershell
+PS C:\Users\RFM5KOR\Downloads\Cybersecurity Log Intelligence System>
+```
 
-Each project includes **code, reports, simulations, and documentation**.
+Create the project directory structure by running the following PowerShell command:
 
-# 📁 Project Overview
+```powershell
+New-Item -ItemType Directory -Force -Path "config", "app", "data/temp", "tests", "scripts" | Out-Null; New-Item -ItemType File -Force -Path "main.py", "README.md", ".env", "config/security.yaml", "config/email.yaml", "config/rules.yaml", "app/__init__.py", "app/database.py", "app/auth.py", "app/security.py", "app/rules.py", "app/processor.py", "app/reporter.py", "app/ui.py", "tests/test_auth.py", "tests/test_rules.py", "tests/test_processor.py", "scripts/init_db.py", "scripts/cleanup.py" | Out-Null; Write-Host "Directory structure created successfully!" -ForegroundColor Green
+```
 
-## 🏗️ Concrete Maturity Meter
+After running the above command, the project structure will be:
 
-### Embedded IoT System for Concrete Strength Monitoring
+```text
+Cybersecurity Log Intelligence System/
+│
+├── main.py
+├── README.md
+├── .env
+│
+├── config/
+│   ├── security.yaml
+│   ├── email.yaml
+│   └── rules.yaml
+│
+├── app/
+│   ├── __init__.py
+│   ├── database.py
+│   ├── auth.py
+│   ├── security.py
+│   ├── rules.py
+│   ├── processor.py
+│   ├── reporter.py
+│   └── ui.py
+│
+├── data/
+│   └── temp/
+│
+├── tests/
+│   ├── test_auth.py
+│   ├── test_rules.py
+│   └── test_processor.py
+│
+└── scripts/
+    ├── init_db.py
+    └── cleanup.py
+```
 
-- Developed a **low-power embedded device** for real-time monitoring of concrete curing using temperature-based maturity models.  
-- Implemented **on-device computation of maturity index and strength %** using MCU.  
-- Integrated **TMP1075 sensor, SPI Flash, and BLE (CC2650)** for sensing, storage, and communication.  
-- Designed a **battery-powered ultra-low power system** using sleep modes and duty-cycled BLE.  
-- Enables **non-destructive, in-situ strength estimation**, eliminating traditional delays.  
+# Complete Installation Script
 
-### Key Highlights
+Go to the project directory:
 
-- Sampling every **10–15 minutes with long battery life (>2 months)**  
-- Reliable BLE communication **through concrete (≈ 8–9 cm range)** 
-- Compact embedded system (~40×30×20 mm)  
-- Full pipeline: sensing → storage → computation → wireless broadcast  
+```powershell
+PS C:\Users\RFM5KOR\Downloads\Cybersecurity Log Intelligence System>
+```
 
-## 🌊 Forecasting of Offshore Wind Power
+## Step 1: Create Conda Environment
 
-### Time-Series Forecasting & Renewable Energy Analysis
+```bash
+conda create -n cybersec python=3.12 -y
+```
 
-- Developed a **data-driven forecasting model** for offshore wind power generation.  
-- Applied **time-series analysis and machine learning techniques** to predict power output.  
-- Preprocessed real-world datasets including **wind speed, temporal patterns, and environmental factors**.  
-- Built models to capture **seasonal trends, variability, and uncertainty in renewable energy systems**.  
+## Step 2: Activate Environment
 
-### Key Contributions
+```bash
+conda activate cybersec
+```
 
-- Data cleaning and feature engineering for time-series modeling  
-- Implementation of forecasting models (statistical / ML-based)  
-- Performance evaluation using error metrics (MAE, RMSE)  
-- Visualization of predicted vs actual wind power trends  
+## Step 3: Upgrade pip
 
-### Impact
+```bash
+python -m pip install --upgrade pip
+```
 
-- Helps in **grid stability and energy planning**  
-- Supports **renewable energy integration**
+## Step 4: Install Core Packages
 
-## 🧠 Integrated AI Query System
+```bash
+pip install streamlit==1.54.0 sqlalchemy==2.0.41 passlib==1.7.4 argon2-cffi==23.1.0 pandas==2.2.3 plotly==6.5.0 reportlab==4.3.1 pyyaml==6.0.2 email-validator==2.3.0 python-dotenv==1.2.2 bcrypt==4.3.0 itsdangerous==2.2.0 cryptography==46.0.7 watchdog==6.0.0 werkzeug==3.1.6
+```
 
-### AI-powered Knowledge Assistant
+## Step 5: Install Development and Security Tools
 
-- Built an AI system capable of **answering, comparing, and summarizing queries**.  
-- Used **Sentence Transformers (semantic search)** + rule-based parsing.  
-- Implemented complete pipeline for:
-  - Data cleaning  
-  - Entity resolution  
-  - Insight extraction  
-- Developed interactive UI using **Streamlit**.
+```bash
+pip install bandit==1.8.3 pip-audit==2.9.0
+```
 
-## 🌐 Full Stack Website Development
+## Step 6: Install Testing Tools
 
-### Full-Stack Hardware Store Website
+```bash
+pip install pytest==9.0.3 pytest-cov==6.1.1
+```
 
-- Built a **complete e-commerce platform** with separate **user & admin portals**.  
-- Backend: **Node.js, Express.js, MongoDB**  
-- Frontend: **HTML, CSS, JavaScript (responsive design)**  
+## Step 7: Verify Vulnerabilities
 
-### Features
+```bash
+pip-audit
+```
 
-- Product browsing + **Featured & Hot Products**
-- Cart & order system  
-- Admin dashboard (products, orders, messages)  
-- Customer–admin communication  
+## Step 8: Verify Installed Packages
 
-## 💻 Pipelined CPU
-
-### 5-Stage Pipelined Processor (VHDL)
-
-- Designed an **8-bit pipelined CPU** with:
-  - IF, ID, EX, MEM, WB stages  
-- Implemented:
-  - Hazard detection  
-  - Data forwarding  
-  - Pipeline stalls  
-
-## 🧮 Multicycle CPU
-
-### 16-bit Multicycle Processor
-
-- Designed CPU using **FSM-controlled datapath architecture**  
-- Supported:
-  - Arithmetic operations  
-  - Branching  
-  - Memory access  
-
-## 🔌 Microcontrollers UART Communication
-
-### 8051 Communication System
-
-- Implemented **master-slave communication** using AT89C5131  
-- Designed **full-duplex UART logic** with synchronization  
-- Displayed outputs on **LCD modules**  
-
-## 📡 Wireless Communication (GNU Radio)
-
-- Designed a **complete digital communication system** using GNU Radio  
-- Implemented:
-  - ASK, FSK, PSK, QAM  
-- Tested with **RTL-SDR hardware**  
-- Analyzed performance under noise and synchronization errors
-
- ## 🧪 VHDL Project
-
-### Digital Logic Design
-
-- Designed multiple components:
-  - ALU  
-  - FSM  
-  - Multiplexers  
-  - Adders  
-
-- Implemented on FPGA with timing validation   
-## ⚡ Analog Computer
-
-### Vertical Motion Analog Computing System
-
-- Designed an **analog computer using op-amps** to solve differential equations.  
-- Implemented **integrators, summers, buffers** for physical system modeling.  
-- Simulated using **LTSpice** and validated experimentally. 
-  
-
-## 🔬 SOS (Summer of Science)
-
-### AI & ML Theory Study
-
-- Studied:
-  - Regression models  
-  - Optimization algorithms  
-  - Neural networks  
-  - PCA & clustering  
-
-- Built strong theoretical foundation in ML  
-
-## 📊 HS312 Project
-
-### Sleep & Dream Quality Analysis
-
-- Collected and analyzed personal sleep data  
-- Performed:
-  - Visualization  
-  - Correlation analysis  
-  - Behavioral insights  
-
-## 📦 Data Analytics Project
-
-### Logistics AI Platform Analysis
-
-- Compared platforms: **Mojro, Locus, FarEye, LogiNext**  
-- Evaluated:
-  - AI capabilities  
-  - Tech stack  
-  - Market positioning  
+```bash
+pip list
+```
 
 
-# 📌 About Me
+# To Delete Existing database
+```
+Remove-Item -Path "data\cybersec.db" -Force -ErrorAction SilentlyContinue
+```
+Verify the database is deleted
+```
+Test-Path "data\cybersec.db"
+```
 
-- **Rahul Kumar**
-- +91-9693261348
-- B.Tech, Electrical Engineering  
-- Indian Institute of Technology Bombay  
-- LinkedIn:https://www.linkedin.com/in/rahul-kumar-90186830a
+# Run the Application
+```bash
+python main.py
+```
+
+The application will automatically open in your browser at:
+
+```text
+http://localhost:8501
+```
+
+# Default Login Credentials
+
+| Role  | Username        | Password                  | Email                                                                             |
+| ----- | --------------- | ------------------------- | --------------------------------------------------------------------------------- |
+| Admin | admin@bosch1211 | Security@bosch#9693261348 | [fixed-term.Rahul.Kumar@in.bosch.com](mailto:fixed-term.Rahul.Kumar@in.bosch.com) |
+
+# How to Use the System
+
+## IT Owner Workflow
+
+1. Login using IT Owner credentials.
+
+```text
+Username: sampleid
+Password: samplepass
+```
+
+2. Upload a log file using **📁 Upload Log File**.
+
+3. Review the uploaded log preview.
+
+4. Click **🔍 Analyze Log**.
+
+5. View the analysis results:
+
+   * Threat summary cards
+   * Severity distribution pie chart
+   * Threat timeline graph
+   * Detailed threat table
+
+6. Generate reports:
+
+   * Click **📄 Generate Report**
+   * PDF report downloads automatically
+   * Report is emailed to the Admin/IT Owner.
