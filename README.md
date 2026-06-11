@@ -136,7 +136,7 @@ Each project includes **code, reports, simulations, and documentation**.
 - Designed an **analog computer using op-amps** to solve differential equations.  
 - Implemented **integrators, summers, buffers** for physical system modeling.  
 - Simulated using **LTSpice** and validated experimentally. 
-  
+
 
 ## 🔬 SOS (Summer of Science)
 
@@ -171,44 +171,10 @@ Each project includes **code, reports, simulations, and documentation**.
   - Market positioning  
 
 
-# 🛠 Technical Skills
-
-## Programming
-- C++  
-- Python  
-- Embedded C  
-- JavaScript  
-- VHDL  
-
-## Tools & Technologies
-- Node.js, Express.js  
-- MongoDB  
-- Streamlit  
-- Keil µVision  
-- ModelSim  
-- LTSpice  
-- GNU Radio  
-
-## Hardware
-- 8051 Microcontroller  
-- CC2650 / STM32  
-- FPGA (Xilinx)  
-- Sensors (TMP1075)  
-- Oscilloscope  
-
-# 🎯 Interests
-
-- Embedded Systems & IoT  
-- Artificial Intelligence & Machine Learning  
-- Computer Architecture  
-- Renewable Energy Systems  
-- Full-Stack Development  
-
 # 📌 About Me
 
-**Rahul Kumar**  
-B.Tech Electrical Engineering  
-Indian Institute of Technology Bombay  
-
-# 📬 Contact 
+- **Rahul Kumar**
+- +91-9693261348
+- B.Tech, Electrical Engineering  
+- Indian Institute of Technology Bombay  
 - LinkedIn:https://www.linkedin.com/in/rahul-kumar-90186830a
