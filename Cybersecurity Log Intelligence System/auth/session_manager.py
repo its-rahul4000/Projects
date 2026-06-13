@@ -4,7 +4,7 @@ import streamlit as st
 
 from database.models import Session, User
 from utils.crypto_utils import generate_session_token, hash_token
-from config.settings import SESSION_TIMEOUT_SECONDS
+from config.settings import SESSION_TIMEOUT_SECONDS, now_ist
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,7 @@ def create_session(user_id: int, db) -> str:
     """Create a DB session record. Returns the raw token (stored only in st.session_state)."""
     raw_token = generate_session_token()
     token_hash = hash_token(raw_token)
-    now = datetime.datetime.utcnow()
+    now = now_ist()
     session = Session(
         user_id=user_id,
         session_token_hash=token_hash,
@@ -33,7 +33,7 @@ def validate_session(raw_token: str, db) -> tuple[bool, "User | None"]:
     if not session:
         return False, None
 
-    now = datetime.datetime.utcnow()
+    now = now_ist()
     if now > session.expiry_time:
         _delete_session(session, db)
         return False, None
@@ -63,7 +63,7 @@ def invalidate_all_user_sessions(user_id: int, db) -> None:
 
 
 def cleanup_expired_sessions(db) -> int:
-    now = datetime.datetime.utcnow()
+    now = now_ist()
     deleted = db.query(Session).filter(Session.expiry_time < now).delete()
     db.commit()
     return deleted

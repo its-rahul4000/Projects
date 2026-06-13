@@ -3,6 +3,7 @@ import logging
 from typing import Optional
 
 from database.models import AuditLog
+from config.settings import now_ist
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,8 @@ ACTION_USER_DEACTIVATE = "USER_DEACTIVATE"
 ACTION_USER_ACTIVATE = "USER_ACTIVATE"
 ACTION_USER_DELETE = "USER_DELETE"
 ACTION_SESSION_EXPIRE = "SESSION_EXPIRE"
+ACTION_FORGOT_PASSWORD = "FORGOT_PASSWORD"
+ACTION_ADMIN_SETUP = "ADMIN_SETUP"
 
 
 def log_action(
@@ -40,7 +43,7 @@ def log_action(
         entry = AuditLog(
             user_id=user_id,
             action=action,
-            timestamp=datetime.datetime.utcnow(),
+            timestamp=now_ist(),
             ip_address=ip_address,
             details=details,
             file_name=file_name,
@@ -75,7 +78,8 @@ def get_audit_logs(
 
 
 def purge_old_logs(db, retention_days: int = 180) -> int:
-    cutoff = datetime.datetime.utcnow() - datetime.timedelta(days=retention_days)
+    import datetime
+    cutoff = now_ist() - datetime.timedelta(days=retention_days)
     deleted = db.query(AuditLog).filter(AuditLog.timestamp < cutoff).delete()
     db.commit()
     return deleted

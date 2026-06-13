@@ -1,4 +1,3 @@
-import datetime
 import logging
 import yaml
 
@@ -6,7 +5,7 @@ from database.db import get_db, create_all_tables
 from database.models import User, DetectionRule
 from config.settings import (
     ADMIN_USERNAME, ADMIN_EMAIL, _ADMIN_INITIAL_PASSWORD,
-    DETECTION_RULES_YAML, ROLE_ADMIN, AUDIT_LOG_RETENTION_DAYS,
+    DETECTION_RULES_YAML, ROLE_ADMIN, AUDIT_LOG_RETENTION_DAYS, now_ist,
 )
 
 logger = logging.getLogger(__name__)
@@ -36,17 +35,18 @@ def _seed_admin(db) -> None:
     if existing:
         return
 
+    now = now_ist()
     admin = User(
         username=ADMIN_USERNAME,
         password_hash=hash_password(_ADMIN_INITIAL_PASSWORD),
         email=ADMIN_EMAIL,
         role=ROLE_ADMIN,
-        created_at=datetime.datetime.utcnow(),
-        password_changed_at=datetime.datetime.utcnow(),
-        password_expiry=None,  # admin password never expires
+        created_at=now,
+        password_changed_at=now,
+        password_expiry=None,
         is_active=True,
         password_type="permanent",
-        is_first_login=False,
+        is_first_login=True,  # triggers recovery-email setup on first login
     )
     db.add(admin)
     logger.info("Default admin account created.")
@@ -81,9 +81,10 @@ def _seed_detection_rules(db) -> None:
 
 
 def _purge_expired_audit_logs(db) -> int:
+    import datetime
     from database.models import AuditLog
 
-    cutoff = datetime.datetime.utcnow() - datetime.timedelta(days=AUDIT_LOG_RETENTION_DAYS)
+    cutoff = now_ist() - datetime.timedelta(days=AUDIT_LOG_RETENTION_DAYS)
     deleted = db.query(AuditLog).filter(AuditLog.timestamp < cutoff).delete()
     if deleted:
         logger.info("Purged %d expired audit log entries.", deleted)

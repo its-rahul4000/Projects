@@ -24,7 +24,7 @@ def render_upload_page(user, db):
         append_mode = st.checkbox(
             "Append to existing analysis",
             value=st.session_state.get("append_mode", False),
-            help="Merge results with a previous upload instead of replacing them.",
+            help="Merge results with a previous upload instead of replacing them. Allows multiple files.",
         )
         st.session_state["append_mode"] = append_mode
 
@@ -39,86 +39,121 @@ def render_upload_page(user, db):
 
     with col_info:
         st.markdown(
-            f"""
-<div class="section-card" style="padding:14px 16px;">
+            f"""<div class="section-card" style="padding:14px 16px;">
 <div class="section-title" style="margin-bottom:8px;">Supported Formats</div>
-
 {" &nbsp;".join(f"<code>{e}</code>" for e in sorted(ALLOWED_EXTENSIONS))}
 
-Max size: **{MAX_UPLOAD_SIZE_MB} MB**
-</div>
-""",
+Max size: **{MAX_UPLOAD_SIZE_MB} MB per file**
+</div>""",
             unsafe_allow_html=True,
         )
 
     # ── File uploader ──────────────────────────────────────────────────────────
-    uploaded_file = st.file_uploader(
-        "Choose a log file",
-        type=[ext.lstrip(".") for ext in ALLOWED_EXTENSIONS],
-        help="Drag and drop or click to browse.",
-        label_visibility="collapsed",
-    )
+    # Append mode: allow multiple files; non-append: single file only
+    allowed_types = [ext.lstrip(".") for ext in ALLOWED_EXTENSIONS]
 
-    if not uploaded_file:
+    if append_mode:
+        uploaded_files = st.file_uploader(
+            "Choose one or more log files",
+            type=allowed_types,
+            accept_multiple_files=True,
+            help="Drag and drop or click to browse. Multiple files allowed in append mode.",
+            label_visibility="collapsed",
+        )
+        # Normalise to list
+        if uploaded_files is None:
+            uploaded_files = []
+    else:
+        single_file = st.file_uploader(
+            "Choose a log file",
+            type=allowed_types,
+            accept_multiple_files=False,
+            help="Drag and drop or click to browse. Only one file allowed in non-append mode.",
+            label_visibility="collapsed",
+        )
+        uploaded_files = [single_file] if single_file is not None else []
+
+    if not uploaded_files:
         st.markdown(
             '<div class="info-box" style="text-align:center;">'
-            "Drag and drop a log file here, or click the button above to browse."
-            "</div>",
+            + ("Drag and drop one or more log files here." if append_mode else "Drag and drop a log file here, or click the button above to browse.")
+            + "</div>",
             unsafe_allow_html=True,
         )
         return
 
-    file_bytes = uploaded_file.getvalue()
-    filename   = uploaded_file.name
+    # ── Validate each file ─────────────────────────────────────────────────────
+    valid_files = []
+    for uf in uploaded_files:
+        fb = uf.getvalue()
+        if not validate_file_extension(uf.name):
+            st.error(f"**{uf.name}**: File type not allowed. Allowed: {', '.join(ALLOWED_EXTENSIONS)}")
+            continue
+        if not validate_file_size(fb):
+            st.error(f"**{uf.name}**: File too large (max {MAX_UPLOAD_SIZE_MB} MB).")
+            continue
+        valid_files.append((uf.name, fb))
 
-    # Validate
-    if not validate_file_extension(filename):
-        st.error(f"File type not allowed. Allowed extensions: {', '.join(ALLOWED_EXTENSIONS)}")
-        return
-    if not validate_file_size(file_bytes):
-        st.error(f"File too large. Maximum allowed size: {MAX_UPLOAD_SIZE_MB} MB.")
+    if not valid_files:
         return
 
-    # Info bar
+    # Info summary
+    file_list = ", ".join(f[0] for f in valid_files)
+    total_kb = sum(len(fb) for _, fb in valid_files) / 1024
     st.markdown(
         f'<div class="success-box">'
-        f"<strong>{filename}</strong> — "
-        f"{len(file_bytes)/1024:.1f} KB uploaded successfully."
+        f"<strong>{len(valid_files)} file(s) ready:</strong> {file_list} — "
+        f"{total_kb:.1f} KB total"
         f"</div>",
         unsafe_allow_html=True,
     )
 
-    # Preview
-    with st.expander("Preview (first 20 lines)", expanded=True):
-        preview_lines = file_bytes.decode("utf-8", errors="replace").splitlines()[:20]
+    # Preview first file
+    first_name, first_bytes = valid_files[0]
+    with st.expander(f"Preview: {first_name} (first 20 lines)", expanded=True):
+        preview_lines = first_bytes.decode("utf-8", errors="replace").splitlines()[:20]
         st.code("\n".join(preview_lines), language="text")
 
     st.divider()
-    if st.button("Analyze Log File", type="primary", use_container_width=True):
-        _run_analysis(user, db, file_bytes, filename, append_mode)
+    btn_label = f"Analyze {len(valid_files)} File(s)" if len(valid_files) > 1 else "Analyze Log File"
+    if st.button(btn_label, type="primary", width='stretch'):
+        _run_analysis(user, db, valid_files, append_mode)
 
 
-def _run_analysis(user, db, file_bytes: bytes, filename: str, append_mode: bool):
-    progress = st.progress(0, text="Saving file...")
+def _run_analysis(user, db, valid_files: list[tuple[str, bytes]], append_mode: bool):
+    progress = st.progress(0, text="Saving files...")
 
-    suffix   = Path(filename).suffix or ".log"
-    temp_path = save_upload_to_temp(file_bytes, suffix)
-    token    = st.session_state.get("session_token", "anon")
-    register_temp_file(token, temp_path)
-    progress.progress(20, text="Parsing log entries...")
+    token = st.session_state.get("session_token", "anon")
+    all_dfs = []
 
-    new_df = parse_log_file(temp_path)
-    if new_df.empty:
+    for i, (filename, file_bytes) in enumerate(valid_files):
+        suffix = Path(filename).suffix or ".log"
+        temp_path = save_upload_to_temp(file_bytes, suffix)
+        register_temp_file(token, temp_path)
+        progress.progress(
+            int(10 + 30 * (i / len(valid_files))),
+            text=f"Parsing {filename}...",
+        )
+        df = parse_log_file(temp_path)
+        if not df.empty:
+            all_dfs.append(df)
+
+    if not all_dfs:
         progress.empty()
-        st.warning("Could not parse any log entries from this file. Please check the file format.")
+        st.warning("Could not parse any log entries from the uploaded file(s). Please check the file format.")
         return
 
-    progress.progress(50, text=f"Parsed {len(new_df)} entries. Running detection rules...")
+    # Merge newly parsed frames together
+    merged_new = all_dfs[0]
+    for df in all_dfs[1:]:
+        merged_new = merge_dataframes(merged_new, df)
+
+    progress.progress(55, text=f"Parsed {len(merged_new)} entries. Running detection rules...")
 
     if append_mode and st.session_state.get("log_df") is not None:
-        merged_df = merge_dataframes(st.session_state["log_df"], new_df)
+        merged_df = merge_dataframes(st.session_state["log_df"], merged_new)
     else:
-        merged_df = new_df
+        merged_df = merged_new
 
     rules = get_enabled_rules(db)
     if not rules:
@@ -130,16 +165,18 @@ def _run_analysis(user, db, file_bytes: bytes, filename: str, append_mode: bool)
     progress.progress(90, text="Updating session...")
 
     existing_files = [] if not append_mode else st.session_state.get("analyzed_files", [])
-    if filename not in existing_files:
-        existing_files.append(filename)
+    for filename, _ in valid_files:
+        if filename not in existing_files:
+            existing_files.append(filename)
 
     st.session_state["log_df"]           = merged_df
     st.session_state["analysis_results"] = findings
     st.session_state["analyzed_files"]   = existing_files
 
+    filenames_str = ", ".join(f for f, _ in valid_files)
     log_action(
         user.id, ACTION_ANALYZE, db,
-        file_name=filename,
+        file_name=filenames_str[:200],
         append_used=append_mode,
         details=f"Analyzed {len(merged_df)} entries with {len(rules)} rules. Threats: {len(findings)}.",
     )
@@ -149,9 +186,11 @@ def _run_analysis(user, db, file_bytes: bytes, filename: str, append_mode: bool)
     progress.empty()
 
     threat_word = "threat" if len(findings) == 1 else "threats"
-    severity_icon = "🔴" if any(f["severity"] == "CRITICAL" for f in findings) else \
-                    "🟠" if any(f["severity"] == "HIGH" for f in findings) else \
-                    "✅" if not findings else "🟡"
+    severity_icon = (
+        "🔴" if any(f["severity"] == "CRITICAL" for f in findings) else
+        "🟠" if any(f["severity"] == "HIGH" for f in findings) else
+        "✅" if not findings else "🟡"
+    )
 
     st.markdown(
         f'<div class="success-box">'

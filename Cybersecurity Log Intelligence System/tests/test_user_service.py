@@ -11,14 +11,14 @@ from config.settings import ROLE_IT_OWNER
 
 
 def test_authenticate_success(admin_user, db):
-    ok, user, msg = authenticate("admin@bosch1211", "Security@bosch#9693261348", db)
+    ok, user, msg = authenticate("admin", "Cybersecuritylogadmin@12798", db)
     assert ok is True
     assert user is not None
     assert msg == ""
 
 
 def test_authenticate_wrong_password(admin_user, db):
-    ok, user, msg = authenticate("admin@bosch1211", "WrongPassword!!!!!", db)
+    ok, user, msg = authenticate("admin", "WrongPassword!!!!!", db)
     assert ok is False
     assert user is None
 

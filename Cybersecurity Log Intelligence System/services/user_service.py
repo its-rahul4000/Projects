@@ -1,4 +1,3 @@
-import datetime
 import logging
 from typing import Optional
 
@@ -6,9 +5,12 @@ from database.models import User, PasswordHistory
 from auth.password import hash_password, verify_password, validate_policy, generate_temp_password, is_in_history
 from auth.session_manager import invalidate_all_user_sessions
 from services.email_service import send_temp_password_email
-from services.audit_service import log_action, ACTION_REGISTER, ACTION_USER_DEACTIVATE, ACTION_USER_ACTIVATE, ACTION_USER_DELETE
+from services.audit_service import (
+    log_action, ACTION_REGISTER, ACTION_USER_DEACTIVATE, ACTION_USER_ACTIVATE,
+    ACTION_USER_DELETE, ACTION_FORGOT_PASSWORD,
+)
 from utils.validators import sanitize_username, validate_email_address
-from config.settings import ROLE_IT_OWNER, PASSWORD_EXPIRY_DAYS, PASSWORD_HISTORY_DEPTH
+from config.settings import ROLE_IT_OWNER, PASSWORD_EXPIRY_DAYS, PASSWORD_HISTORY_DEPTH, now_ist
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +28,6 @@ def get_all_users(db) -> list[User]:
 
 
 def authenticate(username: str, password: str, db) -> tuple[bool, Optional[User], str]:
-    """
-    Returns (success, user, error_message).
-    success=True means credentials are valid and user is active.
-    """
     clean_username = sanitize_username(username)
     user = get_user_by_username(clean_username, db)
     if not user:
@@ -44,8 +42,7 @@ def authenticate(username: str, password: str, db) -> tuple[bool, Optional[User]
 def register_it_owner(username: str, email: str, db) -> tuple[bool, str, str | None]:
     """
     Returns (success, message, temp_password).
-    temp_password is set only when the account was created but the email failed to send.
-    The caller must display it securely so the admin can relay it to the new user.
+    temp_password is only set when the account was created but email delivery failed.
     """
     clean_username = sanitize_username(username)
     clean_email = email.strip().lower()
@@ -56,14 +53,13 @@ def register_it_owner(username: str, email: str, db) -> tuple[bool, str, str | N
         return False, "Username must be at least 3 characters.", None
     if not validate_email_address(clean_email):
         return False, "Invalid email address.", None
-
     if db.query(User).filter_by(username=clean_username).first():
         return False, "Username already taken. Please choose a different one.", None
     if db.query(User).filter_by(email=clean_email).first():
         return False, "Email address already registered.", None
 
     temp_password = generate_temp_password()
-    now = datetime.datetime.utcnow()
+    now = now_ist()
 
     user = User(
         username=clean_username,
@@ -88,12 +84,71 @@ def register_it_owner(username: str, email: str, db) -> tuple[bool, str, str | N
         logger.warning("Temp password email could not be sent to %s", clean_email)
         return (
             True,
-            "Account created successfully! Email delivery failed — the temporary password is shown below. "
-            "Please share it securely with the new user.",
+            "Account created! Email is not configured — share the temporary password below securely with the new user.",
             temp_password,
         )
 
-    return True, "Account created! A temporary password has been sent to the user's email address.", None
+    # Email delivered: never reveal the password on screen.
+    return (
+        True,
+        "Account created! A temporary password has been sent to the user's email address.",
+        None,
+    )
+
+
+def forgot_password(identifier: str, db) -> tuple[bool, str, str | None, str | None]:
+    """
+    Look up a user by username or email, generate a new temp password, email it.
+    Returns (success, message, temp_password, username).
+    temp_password is only set when email could not be sent (so it can be shown on
+    screen as a fallback); it is None when the email was delivered. username is the
+    resolved account username (for pre-filling the login form), or None on failure.
+    """
+    from services.email_service import send_forgot_password_email
+
+    clean = identifier.strip()
+    # Try username first, then email
+    user = get_user_by_username(sanitize_username(clean), db)
+    if not user:
+        user = db.query(User).filter_by(email=clean.lower()).first()
+
+    if not user:
+        return False, "No account found with that username or email address.", None, None
+    if not user.is_active:
+        return False, "This account is disabled. Please contact your Administrator.", None, None
+
+    temp_password = generate_temp_password()
+    now = now_ist()
+    user.password_hash = hash_password(temp_password)
+    user.password_type = "temporary"
+    user.is_first_login = True
+    user.password_changed_at = now
+    db.commit()
+
+    log_action(user.id, ACTION_FORGOT_PASSWORD, db,
+               details=f"Password reset requested for {user.username}")
+
+    sent = send_forgot_password_email(user.email, user.username, temp_password)
+    if not sent:
+        # Email is not configured (or delivery failed) — surface the temp password
+        # on screen as a fallback so the user can still regain access.
+        logger.warning("Forgot-password email not sent for %s (%s); showing on screen",
+                       user.username, user.email)
+        return (
+            True,
+            "Email is not configured — use the temporary password shown below to log in. "
+            "You will be prompted to set a new permanent password.",
+            temp_password,
+            user.username,
+        )
+
+    return (
+        True,
+        "A temporary password has been sent to your registered email address. "
+        "Please check your inbox (and junk folder). You will be prompted to set a new password on login.",
+        None,
+        user.username,
+    )
 
 
 def change_password(
@@ -123,18 +178,19 @@ def change_password(
     if verify_password(new_password, user.password_hash):
         return False, "New password must differ from the current password."
 
+    now = now_ist()
     history_entry = PasswordHistory(
-        user_id=user_id, password_hash=user.password_hash, created_at=datetime.datetime.utcnow()
+        user_id=user_id, password_hash=user.password_hash, created_at=now
     )
     db.add(history_entry)
 
-    now = datetime.datetime.utcnow()
     user.password_hash = hash_password(new_password)
     user.password_changed_at = now
     user.password_type = "permanent"
     user.is_first_login = False
 
     if user.role == ROLE_IT_OWNER:
+        import datetime
         user.password_expiry = now + datetime.timedelta(days=PASSWORD_EXPIRY_DAYS)
     else:
         user.password_expiry = None
@@ -148,7 +204,7 @@ def change_password(
 def is_password_expired(user: User) -> bool:
     if user.password_expiry is None:
         return False
-    return datetime.datetime.utcnow() > user.password_expiry
+    return now_ist() > user.password_expiry
 
 
 def set_user_active(user_id: int, active: bool, db, actor_id: int) -> bool:
@@ -158,7 +214,8 @@ def set_user_active(user_id: int, active: bool, db, actor_id: int) -> bool:
     user.is_active = active
     db.commit()
     action = ACTION_USER_ACTIVATE if active else ACTION_USER_DEACTIVATE
-    log_action(actor_id, action, db, details=f"User {user.username} {'activated' if active else 'deactivated'}.")
+    log_action(actor_id, action, db,
+               details=f"User {user.username} {'activated' if active else 'deactivated'}.")
     if not active:
         invalidate_all_user_sessions(user_id, db)
     return True

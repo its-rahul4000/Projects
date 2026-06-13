@@ -40,7 +40,7 @@ def render_users_page(user, db):
         })
 
     df = pd.DataFrame(rows)
-    st.dataframe(df, use_container_width=True, hide_index=True, height=280)
+    st.dataframe(df, width='stretch', hide_index=True, height=280)
 
     st.divider()
 
@@ -79,20 +79,20 @@ def render_users_page(user, db):
     col1, col2, col3 = st.columns([1, 1, 2])
     with col1:
         if sel.is_active:
-            if st.button("Deactivate", use_container_width=True, key="deact_btn"):
+            if st.button("Deactivate", width='stretch', key="deact_btn"):
                 ok = set_user_active(sel.id, False, db, actor_id=user.id)
                 if ok:
                     st.success(f"'{sel.username}' deactivated.")
                     st.rerun()
         else:
-            if st.button("Activate", use_container_width=True, type="primary", key="act_btn"):
+            if st.button("Activate", width='stretch', type="primary", key="act_btn"):
                 ok = set_user_active(sel.id, True, db, actor_id=user.id)
                 if ok:
                     st.success(f"'{sel.username}' activated.")
                     st.rerun()
 
     with col2:
-        if st.button("Delete Account", use_container_width=True, key="del_btn"):
+        if st.button("Delete Account", width='stretch', key="del_btn"):
             st.session_state["confirm_delete_user"] = sel.id
 
     if st.session_state.get("confirm_delete_user") == sel.id:
@@ -105,7 +105,7 @@ def render_users_page(user, db):
         )
         c1, c2 = st.columns(2)
         with c1:
-            if st.button("Confirm Delete", type="primary", use_container_width=True, key="conf_del"):
+            if st.button("Confirm Delete", type="primary", width='stretch', key="conf_del"):
                 ok, msg = delete_user(sel.id, db, actor_id=user.id)
                 st.session_state.pop("confirm_delete_user", None)
                 if ok:
@@ -114,6 +114,6 @@ def render_users_page(user, db):
                     st.error(msg)
                 st.rerun()
         with c2:
-            if st.button("Cancel", use_container_width=True, key="cancel_del"):
+            if st.button("Cancel", width='stretch', key="cancel_del"):
                 st.session_state.pop("confirm_delete_user", None)
                 st.rerun()

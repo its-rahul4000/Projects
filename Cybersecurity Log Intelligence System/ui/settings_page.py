@@ -1,29 +1,40 @@
 import os
 import streamlit as st
-from auth.access_control import require_admin
 from services.email_service import is_smtp_configured, test_smtp_connection
-from config.settings import ENV_SMTP_HOST, ENV_SMTP_PORT, ENV_SMTP_USER, ENV_SMTP_FROM_NAME
+from config.settings import (
+    ENV_SMTP_HOST, ENV_SMTP_PORT, ENV_SMTP_USER, ENV_SMTP_FROM_NAME,
+    ROLE_ADMIN, now_ist,
+)
 
 
 def render_settings_page(user, db):
-    require_admin()
+    is_admin = user.role == ROLE_ADMIN
 
     st.markdown(
         '<div class="page-header">'
-        '<div class="page-title">⚙️ System Settings</div>'
-        '<div class="page-subtitle">Administrator configuration and diagnostics</div>'
-        "</div>",
+        f'<div class="page-title">{"System Settings" if is_admin else "Settings"}</div>'
+        f'<div class="page-subtitle">'
+        f'{"Administrator configuration and diagnostics" if is_admin else "Manage your account"}'
+        "</div></div>",
         unsafe_allow_html=True,
     )
 
+    # ── Administrator-only diagnostics ──────────────────────────────────────────
+    if is_admin:
+        _render_admin_sections(db)
+
+    # ── Change Password (all users) ─────────────────────────────────────────────
+    _render_change_password_section(user, db)
+
+
+def _render_admin_sections(db):
     # ── SMTP Status ────────────────────────────────────────────────────────────
     st.subheader("Email / SMTP Configuration")
 
     smtp_ok = is_smtp_configured()
     host = os.getenv(ENV_SMTP_HOST, "")
     port = os.getenv(ENV_SMTP_PORT, "587")
-    user = os.getenv(ENV_SMTP_USER, "")
-    from_name = os.getenv(ENV_SMTP_FROM_NAME, "")
+    smtp_user = os.getenv(ENV_SMTP_USER, "")
 
     col1, col2 = st.columns([2, 1])
     with col1:
@@ -31,7 +42,7 @@ def render_settings_page(user, db):
             st.markdown(
                 '<div class="success-box">'
                 "<strong>SMTP is configured.</strong> "
-                f"Host: <code>{host}:{port}</code> — User: <code>{user}</code>"
+                f"Host: <code>{host}:{port}</code> — User: <code>{smtp_user}</code>"
                 "</div>",
                 unsafe_allow_html=True,
             )
@@ -67,7 +78,7 @@ def render_settings_page(user, db):
         st.caption("Attempts to connect and login to the SMTP server without sending any email.")
         if st.button(
             "Test SMTP Connection",
-            use_container_width=True,
+            width='stretch',
             type="primary",
             key="test_smtp_btn",
             disabled=not smtp_ok,
@@ -146,7 +157,8 @@ def render_settings_page(user, db):
         total_rules   = db.query(DetectionRule).count()
         active_rules  = db.query(DetectionRule).filter_by(is_enabled=True).count()
         audit_entries = db.query(AuditLog).count()
-        active_sessions = db.query(DbSession).filter_by(is_active=True).count()
+        # Use expiry_time comparison — Session model has no is_active column
+        active_sessions = db.query(DbSession).filter(DbSession.expiry_time > now_ist()).count()
 
         c1, c2, c3, c4 = st.columns(4)
         with c1:
@@ -159,3 +171,56 @@ def render_settings_page(user, db):
             st.metric("Active Sessions", active_sessions)
     except Exception as exc:
         st.error(f"Could not query database stats: {exc}")
+
+    st.divider()
+
+
+def _render_change_password_section(user, db):
+    # ── Change Password ────────────────────────────────────────────────────────
+    st.subheader("Change Your Password")
+    st.markdown(
+        '<div class="info-box">'
+        "You can change your password here at any time. "
+        "Your current sessions will be invalidated after a password change."
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    with st.form("settings_change_pw_form", clear_on_submit=True):
+        new_pw = st.text_input(
+            "New Password", type="password", placeholder="At least 20 characters"
+        )
+        confirm_pw = st.text_input(
+            "Confirm New Password", type="password", placeholder="Repeat new password"
+        )
+        submitted = st.form_submit_button(
+            "Update Password", width='stretch', type="primary"
+        )
+
+    if submitted:
+        if not new_pw or not confirm_pw:
+            st.error("Both fields are required.")
+        elif new_pw != confirm_pw:
+            st.error("Passwords do not match.")
+        else:
+            from services.user_service import change_password
+            from services.audit_service import ACTION_PASSWORD_CHANGE
+            ok, msg = change_password(user.id, new_pw, db, action_label=ACTION_PASSWORD_CHANGE)
+            if ok:
+                st.success(msg + " Please log in again.")
+                import time; time.sleep(1)
+                for k in list(st.session_state.keys()):
+                    del st.session_state[k]
+                st.rerun()
+            else:
+                st.error(msg)
+
+    with st.expander("Password requirements"):
+        st.markdown("""
+- Minimum **20 characters**
+- At least one **uppercase** letter (A-Z)
+- At least one **lowercase** letter (a-z)
+- At least one **digit** (0-9)
+- At least one **special character** (!@#$%^&* etc.)
+- Cannot reuse any of your last 5 passwords
+        """)

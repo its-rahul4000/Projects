@@ -7,20 +7,18 @@ def render_register_page(db):
     _, col, _ = st.columns([1, 1.6, 1])
     with col:
         st.markdown(
-            f"""
-            <div class="login-card">
+            f"""<div class="login-card">
               <div class="login-logo">🛡️</div>
-              <div class="login-title">IT Owner Registration</div>
-              <div class="login-sub">{APP_NAME}</div>
-            </div>
-            """,
+              <div class="login-title">Cybersecurity Log Intelligence</div>
+              <div class="login-sub">IT Owner Registration</div>
+            </div>""",
             unsafe_allow_html=True,
         )
 
         st.markdown(
             '<div class="info-box">'
             "Register your IT Owner account. A temporary password will be generated "
-            "and emailed to you (if SMTP is configured). You must change it on first login."
+            "and emailed to you. You must change it on first login."
             "</div>",
             unsafe_allow_html=True,
         )
@@ -38,7 +36,7 @@ def render_register_page(db):
             )
             submitted = st.form_submit_button(
                 "Create Account",
-                use_container_width=True,
+                width='stretch',
                 type="primary",
             )
 
@@ -54,13 +52,16 @@ def render_register_page(db):
                     )
 
                 if ok:
-                    st.success(message)
+                    # Pre-fill the username on the login page for the next step.
+                    st.session_state["prefill_username"] = username.strip()
+                    # temp_password is only returned when email could not be sent.
                     if temp_password:
-                        # Email failed — show temp password for admin to relay
+                        st.warning(message)
                         st.markdown(
                             '<div class="warn-box">'
-                            "<strong>Action required:</strong> SMTP is not configured or delivery failed. "
-                            "Please copy the temporary password below and share it securely with the new user."
+                            "<strong>Temporary Password (copy now):</strong> Email is not configured, "
+                            "so this is shown once only. Share it securely with the new user — "
+                            "they must change it on first login."
                             "</div>",
                             unsafe_allow_html=True,
                         )
@@ -69,21 +70,20 @@ def render_register_page(db):
                             unsafe_allow_html=True,
                         )
                         st.caption(
-                            "This password is shown once. "
-                            "The user must change it immediately on first login."
+                            "The user must change this password immediately on their first login. "
+                            "Use **Back to Sign In** below — your username is already filled in."
                         )
                     else:
-                        st.markdown(
-                            '<div class="success-box">'
-                            "A temporary password has been sent to the registered email address. "
-                            "The user should sign in and change it immediately."
-                            "</div>",
-                            unsafe_allow_html=True,
+                        # Emailed — send the new user straight to login, username pre-filled.
+                        st.session_state["flash_login"] = (
+                            message + " Enter the temporary password from your email to sign in."
                         )
+                        st.session_state["page"] = "login"
+                        st.rerun()
                 else:
                     st.error(message)
 
         st.divider()
-        if st.button("Back to Sign In", use_container_width=True):
+        if st.button("Back to Sign In", width='stretch', key="reg_back"):
             st.session_state["page"] = "login"
             st.rerun()

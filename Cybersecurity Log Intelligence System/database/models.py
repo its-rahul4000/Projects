@@ -4,6 +4,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy import (
     String, Integer, Boolean, DateTime, Text, ForeignKey, event
 )
+from config.settings import now_ist
 
 
 class Base(DeclarativeBase):
@@ -19,7 +20,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(254), unique=True, nullable=False, index=True)
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="it_owner")
     created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.datetime.utcnow
+        DateTime, nullable=False, default=now_ist
     )
     password_changed_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
     password_expiry: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
@@ -45,8 +46,8 @@ class Session(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     session_token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False, default=datetime.datetime.utcnow)
-    last_activity: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False, default=now_ist)
+    last_activity: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False, default=now_ist)
     expiry_time: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
 
     user: Mapped["User"] = relationship("User", back_populates="sessions")
@@ -59,7 +60,7 @@ class AuditLog(Base):
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     action: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     timestamp: Mapped[datetime.datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.datetime.utcnow, index=True
+        DateTime, nullable=False, default=now_ist, index=True
     )
     ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
     details: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -76,7 +77,7 @@ class PasswordHistory(Base):
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.datetime.utcnow
+        DateTime, nullable=False, default=now_ist
     )
 
     user: Mapped["User"] = relationship("User", back_populates="password_history")
@@ -87,9 +88,9 @@ class DetectionRule(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     rule_name: Mapped[str] = mapped_column(String(150), unique=True, nullable=False, index=True)
-    rule_type: Mapped[str] = mapped_column(String(20), nullable=False)  # "static" | "dynamic"
+    rule_type: Mapped[str] = mapped_column(String(20), nullable=False)
     condition: Mapped[str] = mapped_column(Text, nullable=False)
-    severity: Mapped[str] = mapped_column(String(20), nullable=False)  # CRITICAL|HIGH|MEDIUM|LOW|INFO
+    severity: Mapped[str] = mapped_column(String(20), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_static: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     default_threshold: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -97,8 +98,8 @@ class DetectionRule(Base):
     is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_by: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.datetime.utcnow
+        DateTime, nullable=False, default=now_ist
     )
     updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+        DateTime, nullable=False, default=now_ist, onupdate=now_ist
     )

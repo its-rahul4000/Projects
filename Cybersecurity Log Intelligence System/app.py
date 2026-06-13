@@ -51,6 +51,7 @@ def main():
     from database.db import get_db
     from auth.session_manager import validate_and_refresh
     from ui.components import set_page_style, render_top_nav
+    from config.settings import ROLE_ADMIN
 
     set_page_style()
     db = get_db()
@@ -64,6 +65,9 @@ def main():
             if page == "register":
                 from ui.register_page import render_register_page
                 render_register_page(db)
+            elif page == "forgot_password":
+                from ui.login_page import render_forgot_password_page
+                render_forgot_password_page(db)
             else:
                 from ui.login_page import render_login_page
                 render_login_page(db)
@@ -75,15 +79,42 @@ def main():
 
         page = st.session_state.get("page", "dashboard")
 
-        # Change-password page: minimal chrome, no nav
-        if page == "change_password":
+        # Admin first-login: must configure recovery email before anything else
+        if (
+            page not in ("admin_setup", "change_password")
+            and current_user.role == ROLE_ADMIN
+            and getattr(current_user, "is_first_login", False)
+            and getattr(current_user, "password_type", "") == "permanent"
+        ):
+            st.session_state["page"] = "admin_setup"
+            st.rerun()
+            return
+
+        # Admin recovery email setup page (minimal chrome, no nav)
+        if page == "admin_setup":
+            set_page_style()
+            from ui.login_page import render_admin_setup_page
+            st.markdown(
+                f'<div style="max-width:520px;margin:48px auto;">'
+                f'<div style="text-align:center;font-size:2.6rem;margin-bottom:6px;">🛡️</div>'
+                f'<div style="text-align:center;font-size:1.4rem;font-weight:800;'
+                f'color:#1e3a5f;margin-bottom:24px;">{APP_NAME}</div>',
+                unsafe_allow_html=True,
+            )
+            render_admin_setup_page(current_user, db)
+            st.markdown("</div>", unsafe_allow_html=True)
+            return
+
+        # Forced password change (first login / expired): minimal chrome, no nav.
+        # A voluntary change (IT Owner "Password" link) falls through to the nav layout.
+        if page == "change_password" and st.session_state.get("force_change_reason"):
             set_page_style()
             from ui.login_page import render_change_password_page
             st.markdown(
-                f'<div style="max-width:480px;margin:60px auto;">'
-                f'<div style="text-align:center;font-size:2rem;margin-bottom:8px;">🛡️</div>'
-                f'<div style="text-align:center;font-size:1.2rem;font-weight:700;color:#1e3a5f;margin-bottom:24px;">'
-                f'{APP_NAME}</div>',
+                f'<div style="max-width:480px;margin:48px auto;">'
+                f'<div style="text-align:center;font-size:2.6rem;margin-bottom:6px;">🛡️</div>'
+                f'<div style="text-align:center;font-size:1.4rem;font-weight:800;'
+                f'color:#1e3a5f;margin-bottom:24px;">{APP_NAME}</div>',
                 unsafe_allow_html=True,
             )
             render_change_password_page(current_user, db)
@@ -92,7 +123,6 @@ def main():
 
         # All authenticated pages get the top nav
         render_top_nav(current_user)
-        st.markdown('<div style="padding: 24px 28px;">', unsafe_allow_html=True)
 
         if page == "dashboard":
             from ui.dashboard_page import render_dashboard
@@ -122,11 +152,13 @@ def main():
             from ui.settings_page import render_settings_page
             render_settings_page(current_user, db)
 
+        elif page == "change_password":
+            from ui.login_page import render_change_password_page
+            render_change_password_page(current_user, db)
+
         else:
             st.session_state["page"] = "dashboard"
             st.rerun()
-
-        st.markdown('</div>', unsafe_allow_html=True)
 
     except Exception as exc:
         st.error(f"An unexpected error occurred: {exc}")

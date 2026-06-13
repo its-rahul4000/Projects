@@ -53,14 +53,14 @@ def render_results_page(user, db):
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        if st.button("Generate PDF Report", use_container_width=True, type="primary", key="gen_pdf_btn"):
+        if st.button("Generate PDF Report", width='stretch', type="primary", key="gen_pdf_btn"):
             st.session_state["_do_pdf"] = True
 
     smtp_ready = is_smtp_configured()
     with col2:
         if st.button(
             "Email Report to Me",
-            use_container_width=True,
+            width='stretch',
             key="email_pdf_btn",
             disabled=not smtp_ready,
             help="" if smtp_ready else "SMTP not configured. Go to Settings to configure email.",
@@ -70,7 +70,7 @@ def render_results_page(user, db):
             st.caption("Email unavailable — SMTP not configured.")
 
     with col3:
-        if st.button("Clear & New Analysis", use_container_width=True, key="clear_btn"):
+        if st.button("Clear & New Analysis", width='stretch', key="clear_btn"):
             for k in ["analysis_results", "log_df", "analyzed_files", "append_mode",
                       "_do_pdf", "_do_email"]:
                 st.session_state.pop(k, None)
@@ -98,7 +98,7 @@ def render_results_page(user, db):
                     data=pdf_bytes,
                     file_name=filename,
                     mime="application/pdf",
-                    use_container_width=True,
+                    width='stretch',
                     type="primary",
                 )
             except Exception as exc:
@@ -138,6 +138,13 @@ def render_results_page(user, db):
 
     st.divider()
 
+    # ── Recommended Actions (inline, above tabs) ───────────────────────────────
+    if findings:
+        from ui.components import show_recommendations_panel
+        show_recommendations_panel(findings)
+
+    st.divider()
+
     # ── Tabs ───────────────────────────────────────────────────────────────────
     tab1, tab2, tab3 = st.tabs(["Findings Table", "Visualizations", "Raw Log Data"])
 
@@ -167,25 +174,25 @@ def render_results_page(user, db):
             with c1:
                 fig = plot_severity_pie(findings)
                 if fig:
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig)
                 else:
                     st.caption("No severity data available.")
             with c2:
                 fig = plot_threat_types(findings)
                 if fig:
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig)
                 else:
                     st.caption("No rule data available.")
 
             fig = plot_timeline(findings)
             if fig:
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig)
             else:
                 st.caption("Timeline unavailable — no parseable timestamps in findings.")
 
             fig = plot_top_sources(findings)
             if fig:
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig)
             else:
                 st.caption("No IP address data available.")
         else:
@@ -203,6 +210,6 @@ def render_results_page(user, db):
             )
             display_cols = [c for c in ["line_num", "timestamp", "level", "source_ip", "message"]
                             if c in log_df.columns]
-            st.dataframe(log_df[display_cols].head(500), use_container_width=True, hide_index=True)
+            st.dataframe(log_df[display_cols].head(500), width='stretch', hide_index=True)
         else:
             st.info("No raw log data available.")

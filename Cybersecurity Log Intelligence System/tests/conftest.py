@@ -28,8 +28,8 @@ def db(db_engine):
 @pytest.fixture
 def admin_user(db):
     user = User(
-        username="admin@bosch1211",
-        password_hash=hash_password("Security@bosch#9693261348"),
+        username="admin",
+        password_hash=hash_password("Cybersecuritylogadmin@12798"),
         email="admin@example.com",
         role=ROLE_ADMIN,
         created_at=datetime.datetime.utcnow(),

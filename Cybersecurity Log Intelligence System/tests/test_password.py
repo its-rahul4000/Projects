@@ -6,18 +6,18 @@ from auth.password import (
 
 
 def test_hash_and_verify():
-    pwd = "Security@bosch#9693261348"
+    pwd = "Cybersecuritylogadmin@12798"
     hashed = hash_password(pwd)
     assert verify_password(pwd, hashed) is True
 
 
 def test_wrong_password_fails():
-    hashed = hash_password("Security@bosch#9693261348")
+    hashed = hash_password("Cybersecuritylogadmin@12798")
     assert verify_password("WrongPassword!123XYZ", hashed) is False
 
 
 def test_policy_valid():
-    ok, violations = validate_policy("Security@bosch#9693261348")
+    ok, violations = validate_policy("Cybersecuritylogadmin@12798")
     assert ok is True
     assert violations == []
 
@@ -55,13 +55,13 @@ def test_temp_password_meets_policy():
 
 
 def test_is_in_history_detects_reuse():
-    pwd = "Security@bosch#9693261348"
+    pwd = "Cybersecuritylogadmin@12798"
     hashed = hash_password(pwd)
     assert is_in_history(pwd, [hashed]) is True
 
 
 def test_is_in_history_no_match():
-    hashed = hash_password("Security@bosch#9693261348")
+    hashed = hash_password("Cybersecuritylogadmin@12798")
     assert is_in_history("Different@pass#9999999999", [hashed]) is False
 
 

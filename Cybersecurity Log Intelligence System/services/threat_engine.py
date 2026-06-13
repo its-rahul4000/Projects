@@ -11,41 +11,53 @@ from database.models import DetectionRule
 logger = logging.getLogger(__name__)
 
 # ── Patterns used by dynamic rule conditions ────────────────────────────────
+# All groups changed to non-capturing (?:) to suppress pandas str.contains warning
+
 _P_FAILED_LOGIN = re.compile(
-    r'(?i)(failed\s+(login|authentication|password|auth)|'
-    r'authentication\s+fail|login\s+fail|invalid\s+(credentials?|password|username)|'
+    r'(?:failed\s+(?:login|authentication|password|auth)|'
+    r'authentication\s+fail|login\s+fail|invalid\s+(?:credentials?|password|username)|'
     r'auth\s+fail|wrong\s+password|bad\s+password|incorrect\s+password)',
+    re.IGNORECASE,
 )
 _P_SUCCESS_LOGIN = re.compile(
-    r'(?i)(login\s+success|authentication\s+success|logged\s+in|'
-    r'access\s+granted|session\s+(created|opened|started)|'
+    r'(?:login\s+success|authentication\s+success|logged\s+in|'
+    r'access\s+granted|session\s+(?:created|opened|started)|'
     r'user\s+authenticated|accepted\s+password)',
+    re.IGNORECASE,
 )
-_P_ACCESS_DENIED = re.compile(r'(?i)(access\s+denied|\b403\b|\bforbidden\b|\bunauthorized\b|permission\s+denied)')
-_P_ERROR = re.compile(r'(?i)\b(error|critical|fatal|exception|traceback|failure)\b')
+_P_ACCESS_DENIED = re.compile(
+    r'(?:access\s+denied|\b403\b|\bforbidden\b|\bunauthorized\b|permission\s+denied)',
+    re.IGNORECASE,
+)
+_P_ERROR = re.compile(r'\b(?:error|critical|fatal|exception|traceback|failure)\b', re.IGNORECASE)
 _P_SERVICE_CRASH = re.compile(
-    r'(?i)(service\s+(crash|restart|failed|stopped)|systemd.*failed|'
+    r'(?:service\s+(?:crash|restart|failed|stopped)|systemd.*failed|'
     r'process\s+kill|segmentation\s+fault|core\s+dump|fatal\s+error|killed\s+by\s+signal)',
+    re.IGNORECASE,
 )
 _P_RESOURCE = re.compile(
-    r'(?i)(out\s+of\s+memory|disk\s+full|too\s+many\s+(connections?|open\s+files?)|'
-    r'no\s+space\s+left|memory\s+(allocation\s+)?fail|swap\s+full|cpu\s+(overload|100%))',
+    r'(?:out\s+of\s+memory|disk\s+full|too\s+many\s+(?:connections?|open\s+files?)|'
+    r'no\s+space\s+left|memory\s+(?:allocation\s+)?fail|swap\s+full|cpu\s+(?:overload|100%))',
+    re.IGNORECASE,
 )
 _P_SHUTDOWN = re.compile(
-    r'(?i)(shutting\s+down|system\s+halt|terminated\s+unexpectedly|'
-    r'killed\s+(by\s+signal|pid)|process\s+exit\s+\d+|SIGKILL|SIGTERM\s+received|'
-    r'abnormal\s+(termination|exit)|crash\s+detect)',
+    r'(?:shutting\s+down|system\s+halt|terminated\s+unexpectedly|'
+    r'killed\s+(?:by\s+signal|pid)|process\s+exit\s+\d+|SIGKILL|SIGTERM\s+received|'
+    r'abnormal\s+(?:termination|exit)|crash\s+detect)',
+    re.IGNORECASE,
 )
 _P_CONFIG = re.compile(
-    r'(?i)(configuration\s+(changed|modified|updated)|config\s+(changed|update|modified)|'
-    r'setting\s+(modified|changed)|parameter\s+(changed|updated)|policy\s+updated)',
+    r'(?:configuration\s+(?:changed|modified|updated)|config\s+(?:changed|update|modified)|'
+    r'setting\s+(?:modified|changed)|parameter\s+(?:changed|updated)|policy\s+updated)',
+    re.IGNORECASE,
 )
 _P_DB_ERROR = re.compile(
-    r'(?i)(database\s+(error|fail|down)|sql\s+(error|exception)|'
+    r'(?:database\s+(?:error|fail|down)|sql\s+(?:error|exception)|'
     r'connection\s+refused.*(?:db|database|mysql|postgres|sqlite)|'
     r'query\s+fail|deadlock\s+detect|table\s+lock|db\s+conn.*fail)',
+    re.IGNORECASE,
 )
-_P_HOURS = re.compile(r'(?i)(T|\s)(\d{2}):\d{2}:\d{2}')
+_P_HOURS = re.compile(r'(?:T|\s)(\d{2}):\d{2}:\d{2}', re.IGNORECASE)
 
 
 def get_enabled_rules(db) -> list[DetectionRule]:
@@ -69,7 +81,10 @@ def run_analysis(log_df: pd.DataFrame, rules: list[DetectionRule]) -> list[dict]
         except Exception as exc:
             logger.warning("Rule '%s' evaluation failed: %s", rule.rule_name, exc)
 
-    findings.sort(key=lambda f: {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFO": 0}.get(f["severity"], 0), reverse=True)
+    findings.sort(
+        key=lambda f: {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFO": 0}.get(f["severity"], 0),
+        reverse=True,
+    )
     return findings
 
 
@@ -118,7 +133,6 @@ def _apply_dynamic_rule(rule: DetectionRule, df: pd.DataFrame) -> list[dict]:
 
 
 def _apply_behavioural_rule(rule: DetectionRule, df: pd.DataFrame) -> list[dict]:
-    """Handle rules whose condition starts with 'DYNAMIC:'"""
     key = rule.condition.split(":", 1)[1]
     threshold = rule.default_threshold or 3
     window = rule.time_window_seconds or 300
