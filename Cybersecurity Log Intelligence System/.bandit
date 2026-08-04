@@ -1,0 +1,5 @@
+[bandit]
+# Test files legitimately use `assert` (B101) and contain non-secret fixture strings;
+# they are not part of the shipped application, so they are excluded from the security
+# scan. Application code is fully scanned. Run:  bandit -r . --ini .bandit
+exclude = ./tests,./Testcases,./temp,./.pytest_cache,./.git,./build,./dist

