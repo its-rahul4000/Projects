@@ -4,17 +4,52 @@ This repository contains a collection of **academic, research, and personal proj
 
 The projects span across multiple domains:
 
-- Embedded Systems  
-- Artificial Intelligence & Machine Learning  
-- Full-Stack Development  
-- Computer Architecture  
-- Analog Computing  
-- Energy Systems & Forecasting  
-- Data Analytics  
+- Cybersecurity
+- Embedded Systems
+- Artificial Intelligence & Machine Learning
+- Full-Stack Development
+- Computer Architecture
+- Analog Computing
+- Energy Systems & Forecasting
+- Data Analytics
 
-Each project includes **code, reports, simulations, and documentation**.
+Each project includes code, reports, simulations, documentation, and real-world engineering solutions developed through academic, research, and industry experience.
 
 # 📁 Project Overview
+
+## 🛡️ Cybersecurity Log Intelligence System
+
+### Enterprise Security Log Analysis & Threat Detection Platform
+
+- Architected and developed an **enterprise Cybersecurity Log Intelligence System** for automated security log analysis and threat detection.
+- Implemented **static rule-based and behavioral anomaly detection** to identify attacks from large-scale log datasets.
+- Built an interactive **dashboard with visualizations**, PDF/CSV report generation, and automated security insights.
+- Designed a secure **RBAC-based application** featuring Argon2id authentication, audit logging, configurable detection rules, concurrent log processing, and secure data lifecycle management.
+- Incorporated industry security frameworks including **MITRE ATT&CK, OWASP, NIST SP 800-53, ISO/IEC 27001, CERT-In, and the EU Cyber Resilience Act**.
+
+### Key Features
+
+- Multi-format log parsing and automated threat detection
+- Static signature and behavioral anomaly detection
+- Interactive Streamlit dashboard with security analytics
+- PDF & CSV security report generation
+- Configurable detection-rule management
+- Role-Based Access Control (Administrator & IT Owner)
+- Audit logging and secure session management
+- Concurrent processing for large log files
+
+### Technologies
+
+- Python
+- Streamlit
+- SQLite
+- Pandas
+- Plotly
+- Argon2id Authentication
+- YAML Rule Engine
+- MITRE ATT&CK
+- OWASP
+
 
 ## 🏗️ Concrete Maturity Meter
 
