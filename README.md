@@ -209,7 +209,7 @@ Each project includes code, reports, simulations, documentation, and real-world 
 # 📌 About Me
 
 - **Rahul Kumar**
-- +91-9693261348
+- +91-7050243955
 - B.Tech, Electrical Engineering  
 - Indian Institute of Technology Bombay  
 - LinkedIn:https://www.linkedin.com/in/rahul-kumar-90186830a
