@@ -1,6 +1,6 @@
 # 📂 Rahul Kumar – Engineering & Research Projects
 
-This repository contains a collection of **academic, research, and personal projects** developed during my undergraduate studies in **Electrical Engineering at IIT Bombay**.
+This repository contains a collection of **academic, internship, research, and personal projects** developed during my undergraduate studies in **Electrical Engineering at IIT Bombay**.
 
 The projects span across multiple domains:
 
